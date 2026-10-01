@@ -61,6 +61,14 @@ class Store:
         result = cursor.fetchone()
         return result[0] if result else 0
 
+    def has_last_uid(self, account: str, folder: str, uidvalidity: int) -> bool:
+        """True, jeśli dla folderu zapisano już linię bazową (także 0) przy tym UIDVALIDITY."""
+        row = self.connection.execute(
+            "SELECT 1 FROM folder_state WHERE account = ? AND folder = ? AND uidvalidity = ?",
+            (account, folder, uidvalidity),
+        ).fetchone()
+        return row is not None
+
     def set_last_uid(self, account: str, folder: str, uidvalidity: int, last_uid: int) -> None:
         cursor = self.connection.cursor()
         cursor.execute(

@@ -127,7 +127,19 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                 continue
 
             last_uid = deps.store.get_last_uid(account.name, folder, uidvalidity)
-            is_first_run = last_uid == 0
+            is_first_run = not deps.store.has_last_uid(account.name, folder, uidvalidity)
+            backlog_ok = True
+            baseline = 0
+            if is_first_run:
+                # Pierwsze uruchomienie: cała dotychczasowa historia NIE jest "nowa" -- obsługuje ją
+                # tylko tryb zaległych (UNSEEN). Zapamiętujemy najwyższy UID jako linię bazową.
+                try:
+                    baseline = max(client.get_uids_greater_than(folder, 0), default=0)
+                except Exception as exc:
+                    result.errors.append(
+                        f"Błąd ustalania linii bazowej dla '{account.name}/{folder}': {exc}"
+                    )
+                    continue
 
             # 1. Obsługa zaległości (Backlog)
             if is_first_run or check_backlog:
@@ -140,6 +152,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         f"Błąd pobierania zaległości dla '{account.name}/{folder}': {exc}"
                     )
                     backlog_items = []
+                    backlog_ok = False
 
                 for uid, mail in backlog_items:
                     rule_info = MailInfo(
@@ -170,9 +183,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         mail.body_text,
                         rule_res.reasons,
                     )
-                    lang = (
-                        deps.config.language if deps.config.language in ("pl", "en") else "other"
-                    )
+                    lang = deps.config.language if deps.config.language in ("pl", "en") else "other"
                     model = pick_model(lang, deps.config.ollama)
 
                     try:
@@ -212,6 +223,12 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                             status="analyzed",
                             importance=final_importance,
                         )
+
+            if is_first_run:
+                if not backlog_ok:
+                    continue  # ponowimy w następnym cyklu
+                commit_progress(deps.store, account.name, folder, uidvalidity, baseline)
+                last_uid = baseline
 
             # 2. Pobieranie i analiza nowych wiadomości
             try:

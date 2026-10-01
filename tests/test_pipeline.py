@@ -55,6 +55,7 @@ def test_pipeline_normal_cycle(store):
     )
 
     client = FakeMailboxClient(uidvalidity=10)
+    store.set_last_uid("test_acc", "INBOX", 10, 0)  # folder znany: maile 1-3 są nowe
     # Mail 1: Zablokowany
     client.folders["INBOX"][1] = _make_email_bytes(
         sender="spam@bad.com",
@@ -141,6 +142,7 @@ def test_pipeline_ollama_failure_does_not_lose_mail(store):
     )
 
     client = FakeMailboxClient(uidvalidity=1)
+    store.set_last_uid("acc1", "INBOX", 1, 0)  # folder znany: mail jest nowy
     # Mail 1 przejdzie pomyślnie
     client.folders["INBOX"][1] = _make_email_bytes(
         sender="a@a.pl", subject="S1", body="B1", message_id="<m1@a.pl>"
@@ -230,7 +232,56 @@ def test_pipeline_backlog_handling_and_resolve(store):
 
     # Sprawdzenie statusu w bazie
     cursor = store.connection.cursor()
-    cursor.execute(
-        "SELECT status FROM seen WHERE account='acc1' AND folder='INBOX' AND uid=1"
-    )
+    cursor.execute("SELECT status FROM seen WHERE account='acc1' AND folder='INBOX' AND uid=1")
     assert cursor.fetchone()[0] == "backlog_declined"
+
+
+def _first_run_deps(store, client, calls):
+    config = AppConfig(
+        accounts=[AccountConfig(name="acc", host="h", folders=["INBOX"], sent_folder="")],
+        importance_threshold=6,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        resp = {"importance": 9, "reason": "r", "action": "read_now", "language": "pl"}
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    ollama = OllamaClient(config.ollama, transport=httpx.MockTransport(handler))
+    return PipelineDeps(
+        config=config, store=store, client_factory=lambda acc: client, ollama_client=ollama
+    )
+
+
+def test_first_run_does_not_analyze_history(store):
+    client = FakeMailboxClient(uidvalidity=7)
+    for uid in (1, 2, 3):
+        client.folders["INBOX"][uid] = _make_email_bytes(
+            sender="a@b.pl", subject=f"stary {uid}", body="x", message_id=f"<m{uid}@b.pl>"
+        )
+    calls: list[int] = []
+    result = run_cycle(_first_run_deps(store, client, calls))
+
+    assert calls == []  # historia (przeczytana) nie idzie do LLM
+    assert result.important == [] and result.errors == []
+    assert store.get_last_uid("acc", "INBOX", 7) == 3  # linia bazowa
+
+    # nowy mail po pierwszym cyklu jest analizowany
+    client.folders["INBOX"][4] = _make_email_bytes(
+        sender="a@b.pl", subject="nowy", body="x", message_id="<m4@b.pl>"
+    )
+    result = run_cycle(_first_run_deps(store, client, calls))
+    assert [m.uid for m in result.important] == [4]
+
+
+def test_first_run_on_empty_mailbox_does_not_lose_first_mail(store):
+    client = FakeMailboxClient(uidvalidity=8)
+    calls: list[int] = []
+    run_cycle(_first_run_deps(store, client, calls))
+    assert store.has_last_uid("acc", "INBOX", 8)
+
+    client.folders["INBOX"][1] = _make_email_bytes(
+        sender="a@b.pl", subject="pierwszy", body="x", message_id="<m1@b.pl>"
+    )
+    result = run_cycle(_first_run_deps(store, client, calls))
+    assert [m.uid for m in result.important] == [1]

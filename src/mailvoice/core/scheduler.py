@@ -81,9 +81,8 @@ class Notifier:
 
         if self.notify_mode == "beep":
             if self.state == NotifierState.BEEPING:
-                if (
-                    self.last_action_time is None
-                    or (now - self.last_action_time) >= timedelta(minutes=self.beep_repeat_minutes)
+                if self.last_action_time is None or (now - self.last_action_time) >= timedelta(
+                    minutes=self.beep_repeat_minutes
                 ):
                     self.last_action_time = now
                     return NotificationAction.BEEP

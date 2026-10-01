@@ -40,7 +40,7 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 - [x] E0 Szkielet: pyproject, venv (mise python 3.12), struktura katalogów, pytest+ruff, puste okno PySide6.
 - [x] E1a core/store.py (SQLite: seen, folder_state) + testy.
 - [x] E1b core/config.py (konta, opis analizy, VIP/słowa, interwał, tryb powiadomień, endpointy Ollama) + testy.
-- [ ] E1c core/secrets.py: Protocol SecretStore + KeyringStore (domyślny) + Fido2Store (python-fido2 hmac-secret -> AES-256-GCM, wiele kluczy, awaryjna fraza; klucz sesji w pamięci). Opcjonalnie dotyk klucza przed odczytem streszczeń na głos. Test na Windows obowiązkowy (hmac-secret/WebAuthn).
+- [ ] E1c (otwarte, patrz GitHub Issues) core/secrets.py: Protocol SecretStore + KeyringStore (domyślny) + Fido2Store (python-fido2 hmac-secret -> AES-256-GCM, wiele kluczy, awaryjna fraza; klucz sesji w pamięci). Opcjonalnie dotyk klucza przed odczytem streszczeń na głos. Test na Windows obowiązkowy (hmac-secret/WebAuthn).
 - [x] E2a textutil.py (html_to_text, clean_body, truncate_for_llm) zrobione [x].
 - [x] E2b mailparse.py (parse_raw -> ParsedMail; identyfikatory Message-ID z nawiasami <>, daty ze strefą).
 - [x] E2 core/imap_fetch.py: pobieranie nowych (UID>last), BODY.PEEK, parser tekstu (HTML->tekst), testy na mocku.

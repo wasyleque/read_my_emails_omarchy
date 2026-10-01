@@ -54,3 +54,11 @@ def test_persistence_on_file(tmp_path):
     again = Store(db)
     assert again.is_seen("a", "INBOX", 1, 5, "<m@x>")
     assert again.get_last_uid("a", "INBOX", 1) == 5
+
+
+def test_has_last_uid_distinguishes_zero_baseline_from_missing():
+    store = Store()
+    assert not store.has_last_uid("a", "INBOX", 1)
+    store.set_last_uid("a", "INBOX", 1, 0)
+    assert store.has_last_uid("a", "INBOX", 1)
+    assert not store.has_last_uid("a", "INBOX", 2)

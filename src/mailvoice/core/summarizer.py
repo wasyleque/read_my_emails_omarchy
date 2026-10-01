@@ -133,9 +133,7 @@ def summarize(
     if not clean_body:
         if language == "en":
             return (
-                f"No message body. Subject: {mail.subject}."
-                if mail.subject
-                else "Empty message."
+                f"No message body. Subject: {mail.subject}." if mail.subject else "Empty message."
             )
         return (
             f"Wiadomość bez treści. Temat: {mail.subject}."
