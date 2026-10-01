@@ -1,0 +1,236 @@
+"""Testy modułu potoku przetwarzania poczty (pipeline.py)."""
+
+import json
+from email.message import EmailMessage
+
+import httpx
+import pytest
+
+from mailvoice.core.analyzer import OllamaClient
+from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig
+from mailvoice.core.pipeline import PipelineDeps, resolve_backlog, run_cycle
+from mailvoice.core.store import Store
+from tests.test_imap_fetch import FakeMailboxClient
+
+
+def _make_email_bytes(
+    sender: str,
+    subject: str,
+    body: str,
+    message_id: str,
+    in_reply_to: str | None = None,
+) -> bytes:
+    msg = EmailMessage()
+    msg["From"] = sender
+    msg["Subject"] = subject
+    msg["Message-ID"] = message_id
+    msg["Date"] = "Wed, 01 Oct 2026 12:00:00 +0000"
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    msg.set_content(body)
+    return msg.as_bytes()
+
+
+@pytest.fixture
+def store():
+    s = Store(":memory:")
+    yield s
+    s.close()
+
+
+def test_pipeline_normal_cycle(store):
+    config = AppConfig(
+        accounts=[
+            AccountConfig(
+                name="test_acc",
+                host="imap.test.local",
+                folders=["INBOX"],
+                sent_folder="Sent",
+            )
+        ],
+        vip_senders=["boss@firm.pl"],
+        blocked_senders=["spam@bad.com"],
+        importance_threshold=6,
+        ollama=OllamaConfig(lan_url="http://lan:11434"),
+    )
+
+    client = FakeMailboxClient(uidvalidity=10)
+    # Mail 1: Zablokowany
+    client.folders["INBOX"][1] = _make_email_bytes(
+        sender="spam@bad.com",
+        subject="Kup cos",
+        body="Spam",
+        message_id="<msg1@bad.com>",
+    )
+    # Mail 2: Od szefa (VIP bonus +3), Ollama da 4 -> suma 7 >= 6 (ważny)
+    client.folders["INBOX"][2] = _make_email_bytes(
+        sender="boss@firm.pl",
+        subject="Ważne spotkanie",
+        body="Musimy omowic budzet",
+        message_id="<msg2@firm.pl>",
+    )
+    # Mail 3: Zwykły, Ollama da 2 -> suma 2 < 6 (nieważny)
+    client.folders["INBOX"][3] = _make_email_bytes(
+        sender="newsletter@info.pl",
+        subject="Nowinki",
+        body="Newsletter tygodniowy",
+        message_id="<msg3@info.pl>",
+    )
+
+    ollama_calls = []
+
+    def mock_ollama(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content)
+        content = data["messages"][1]["content"]
+        ollama_calls.append(content)
+
+        if "Ważne spotkanie" in content:
+            resp = {
+                "importance": 4,
+                "reason": "Spotkanie z szefem",
+                "action": "read_now",
+                "language": "pl",
+            }
+        else:
+            resp = {
+                "importance": 2,
+                "reason": "Biuletyn",
+                "action": "ignore",
+                "language": "pl",
+            }
+        return httpx.Response(
+            200,
+            json={"message": {"content": json.dumps(resp)}},
+        )
+
+    transport = httpx.MockTransport(mock_ollama)
+    ollama_client = OllamaClient(config.ollama, transport=transport)
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda acc: client,
+        ollama_client=ollama_client,
+    )
+
+    result = run_cycle(deps)
+
+    assert len(result.errors) == 0
+    # Tylko mail 2 jest ważny
+    assert len(result.important) == 1
+    assert result.important[0].uid == 2
+    assert result.important[0].final_importance == 7
+    assert "vip_sender" in result.important[0].rule_reasons
+
+    # Zablokowany mail 1 NIE trafił do Ollamy (tylko 2 zapytania)
+    assert len(ollama_calls) == 2
+
+    # Wszystkie 3 maile są oznaczone w store jako seen
+    assert store.is_seen("test_acc", "INBOX", 10, 1, "<msg1@bad.com>") is True
+    assert store.is_seen("test_acc", "INBOX", 10, 2, "<msg2@firm.pl>") is True
+    assert store.is_seen("test_acc", "INBOX", 10, 3, "<msg3@info.pl>") is True
+
+    # last_uid został przesunięty na 3
+    assert store.get_last_uid("test_acc", "INBOX", 10) == 3
+
+
+def test_pipeline_ollama_failure_does_not_lose_mail(store):
+    config = AppConfig(
+        accounts=[AccountConfig(name="acc1", host="imap.local", folders=["INBOX"])],
+        importance_threshold=6,
+    )
+
+    client = FakeMailboxClient(uidvalidity=1)
+    # Mail 1 przejdzie pomyślnie
+    client.folders["INBOX"][1] = _make_email_bytes(
+        sender="a@a.pl", subject="S1", body="B1", message_id="<m1@a.pl>"
+    )
+    # Mail 2 wywoła błąd Ollamy
+    client.folders["INBOX"][2] = _make_email_bytes(
+        sender="b@b.pl", subject="S2", body="B2", message_id="<m2@b.pl>"
+    )
+
+    def mock_ollama(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content)
+        if "S2" in data["messages"][1]["content"]:
+            raise httpx.ConnectError("Ollama offline")
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": json.dumps(
+                        {"importance": 5, "reason": "ok", "action": "read_later", "language": "pl"}
+                    )
+                }
+            },
+        )
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda acc: client,
+        ollama_client=OllamaClient(config.ollama, transport=httpx.MockTransport(mock_ollama)),
+    )
+
+    result = run_cycle(deps)
+
+    # Jeden błąd zarejestrowany
+    assert len(result.errors) == 1
+    # Mail 1 oznaczony jako seen
+    assert store.is_seen("acc1", "INBOX", 1, 1, "<m1@a.pl>") is True
+    # Mail 2 NIE oznaczony jako seen (spróbujemy w kolejnym cyklu)
+    assert store.is_seen("acc1", "INBOX", 1, 2, "<m2@b.pl>") is False
+    # last_uid nie został przesunięty za mail 1
+    assert store.get_last_uid("acc1", "INBOX", 1) == 1
+
+
+def test_pipeline_backlog_handling_and_resolve(store):
+    config = AppConfig(
+        accounts=[AccountConfig(name="acc1", host="imap.local", folders=["INBOX"])],
+        importance_threshold=6,
+    )
+
+    client = FakeMailboxClient(uidvalidity=5)
+    # Wiadomości zaległe (starsze niż last_uid)
+    client.folders["INBOX"][1] = _make_email_bytes(
+        sender="c@c.pl", subject="Stary ważny", body="Treść", message_id="<m1@c.pl>"
+    )
+    client.unseen_uids["INBOX"] = {1}
+    store.set_last_uid("acc1", "INBOX", 5, 1)
+
+    def mock_ollama(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": json.dumps(
+                        {"importance": 8, "reason": "Ważne", "action": "read_now", "language": "pl"}
+                    )
+                }
+            },
+        )
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda acc: client,
+        ollama_client=OllamaClient(config.ollama, transport=httpx.MockTransport(mock_ollama)),
+    )
+
+    result = run_cycle(deps, check_backlog=True)
+    assert len(result.backlog_important) == 1
+    assert result.backlog_important[0].uid == 1
+
+    # Ważny zaległy NIE jest jeszcze w seen
+    assert store.is_seen("acc1", "INBOX", 5, 1, "<m1@c.pl>") is False
+
+    # Użytkownik odrzuca zaległe (accepted=False) -> zapis z flagą backlog_declined
+    resolve_backlog(store, result.backlog_important, accepted=False)
+    assert store.is_seen("acc1", "INBOX", 5, 1, "<m1@c.pl>") is True
+
+    # Sprawdzenie statusu w bazie
+    cursor = store.connection.cursor()
+    cursor.execute(
+        "SELECT status FROM seen WHERE account='acc1' AND folder='INBOX' AND uid=1"
+    )
+    assert cursor.fetchone()[0] == "backlog_declined"
