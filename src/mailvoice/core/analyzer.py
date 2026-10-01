@@ -9,7 +9,19 @@ from mailvoice.core.textutil import truncate_for_llm
 
 
 class AnalyzerError(Exception):
-    """Exception raised when analysis fails."""
+    """Bazowy wyjątek rzucany w przypadku błędów analizy."""
+
+    pass
+
+
+class AnalyzerTransportError(AnalyzerError):
+    """Błąd komunikacji z serwerem Ollama (sieć, timeout, HTTP)."""
+
+    pass
+
+
+class AnalyzerFormatError(AnalyzerError):
+    """Błąd formatu lub walidacji odpowiedzi z modelu Ollama."""
 
     pass
 
@@ -103,7 +115,7 @@ class OllamaClient:
                 continue
 
         # If we get here, all URLs failed
-        raise AnalyzerError(f"All Ollama endpoints failed: {last_error}")
+        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
 
     def chat_text(self, messages: List[Dict], model: str) -> str:
         """Wysyła zapytanie do Ollamy i zwraca treść odpowiedzi jako zwykły tekst."""
@@ -135,19 +147,19 @@ class OllamaClient:
                 last_error = e
                 continue
 
-        raise AnalyzerError(f"All Ollama endpoints failed: {last_error}")
+        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
 
 
 def _parse_response(response: httpx.Response) -> Analysis:
-    """Parsuje odpowiedź /api/chat; każdy błąd formatu -> AnalyzerError."""
+    """Parsuje odpowiedź /api/chat; każdy błąd formatu -> AnalyzerFormatError."""
     try:
         result = json.loads(response.json()["message"]["content"])
         importance = max(0, min(10, int(result["importance"])))
         reason = str(result["reason"])
         action = result["action"]
         language = result["language"]
-    except (ValueError, KeyError, TypeError) as exc:
-        raise AnalyzerError(f"Niepoprawna odpowiedź Ollamy: {exc}") from exc
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise AnalyzerFormatError(f"Niepoprawna odpowiedź Ollamy: {exc}") from exc
     if action not in ("read_now", "read_later", "ignore"):
         action = "read_later"
     if language not in ("pl", "en", "other"):

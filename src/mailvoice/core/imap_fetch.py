@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from typing import Protocol, Sequence
 
-from imap_tools import A, MailBox, MailBoxUnencrypted
+from imap_tools import A, MailBox
 
 from mailvoice.core.mailparse import ParsedMail, parse_raw
 from mailvoice.core.store import Store
@@ -61,7 +61,7 @@ class ImapToolsClient:
         self._password = password
         self.use_ssl = use_ssl
         self.timeout = timeout
-        self._mailbox: MailBox | MailBoxUnencrypted | None = None
+        self._mailbox: MailBox | None = None
 
     def _sanitize_message(self, message: str) -> str:
         """Usuwa hasło z komunikatów o błędach przed ich zalogowaniem/zgłoszeniem."""
@@ -69,16 +69,18 @@ class ImapToolsClient:
             return message.replace(self._password, "******")
         return message
 
-    def _get_mailbox(self) -> MailBox | MailBoxUnencrypted:
+    def _get_mailbox(self) -> MailBox:
         """Pobiera lub tworzy aktywne połączenie z serwerem IMAP."""
         if self._mailbox is not None:
             return self._mailbox
 
+        if not self.use_ssl:
+            raise FetchError(
+                "Połączenia nieszyfrowane są zabronione. Wymagane jest szyfrowanie TLS/SSL."
+            )
+
         try:
-            if self.use_ssl:
-                mailbox = MailBox(self.host, self.port, timeout=self.timeout)
-            else:
-                mailbox = MailBoxUnencrypted(self.host, self.port, timeout=self.timeout)
+            mailbox = MailBox(self.host, self.port, timeout=self.timeout)
             mailbox.login(self.username, self._password)
             self._mailbox = mailbox
             return self._mailbox

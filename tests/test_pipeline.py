@@ -8,7 +8,12 @@ import pytest
 
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig
-from mailvoice.core.pipeline import PipelineDeps, resolve_backlog, run_cycle
+from mailvoice.core.pipeline import (
+    PipelineDeps,
+    load_pending_backlog,
+    resolve_backlog,
+    run_cycle,
+)
 from mailvoice.core.store import Store
 from tests.test_imap_fetch import FakeMailboxClient
 
@@ -223,17 +228,22 @@ def test_pipeline_backlog_handling_and_resolve(store):
     assert len(result.backlog_important) == 1
     assert result.backlog_important[0].uid == 1
 
-    # Ważny zaległy NIE jest jeszcze w seen
-    assert store.is_seen("acc1", "INBOX", 5, 1, "<m1@c.pl>") is False
+    # Ważny zaległy ma status backlog_pending w seen
+    assert store.get_seen_status("acc1", "INBOX", 5, 1) == "backlog_pending"
+
+    # Odtwarzanie zaległości po restarcie
+    pending = load_pending_backlog(store)
+    assert len(pending) == 1
+    assert pending[0].uid == 1
+    assert pending[0].message_id == "<m1@c.pl>"
 
     # Użytkownik odrzuca zaległe (accepted=False) -> zapis z flagą backlog_declined
-    resolve_backlog(store, result.backlog_important, accepted=False)
-    assert store.is_seen("acc1", "INBOX", 5, 1, "<m1@c.pl>") is True
+    resolve_backlog(store, pending, accepted=False)
+    assert store.get_seen_status("acc1", "INBOX", 5, 1) == "backlog_declined"
 
-    # Sprawdzenie statusu w bazie
-    cursor = store.connection.cursor()
-    cursor.execute("SELECT status FROM seen WHERE account='acc1' AND folder='INBOX' AND uid=1")
-    assert cursor.fetchone()[0] == "backlog_declined"
+    # W kolejnym cyklu zaległość nie jest dublowana
+    result2 = run_cycle(deps, check_backlog=True)
+    assert len(result2.backlog_important) == 0
 
 
 def _first_run_deps(store, client, calls):
@@ -285,3 +295,89 @@ def test_first_run_on_empty_mailbox_does_not_lose_first_mail(store):
     )
     result = run_cycle(_first_run_deps(store, client, calls))
     assert [m.uid for m in result.important] == [1]
+
+
+def test_pipeline_poison_pill_format_error_retries_and_marks_failed(store):
+    config = AppConfig(
+        accounts=[AccountConfig(name="acc", host="h", folders=["INBOX"], sent_folder="")],
+        importance_threshold=6,
+    )
+    client = FakeMailboxClient(uidvalidity=9)
+    # Mail 1: powoduje błąd formatu (np. zły JSON z Ollamy)
+    client.folders["INBOX"][1] = _make_email_bytes(
+        sender="a@b.pl", subject="Poison", body="x", message_id="<m1@b.pl>"
+    )
+    # Mail 2: poprawny ważny mail
+    client.folders["INBOX"][2] = _make_email_bytes(
+        sender="a@b.pl", subject="Good", body="x", message_id="<m2@b.pl>"
+    )
+    store.set_last_uid("acc", "INBOX", 9, 0)
+
+    def mock_ollama(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content)
+        content = data["messages"][1]["content"]
+        if "Poison" in content:
+            # Zwracamy odpowiedź 200, ale z nieprawidłową zawartością JSON (błąd formatu)
+            return httpx.Response(200, json={"message": {"content": "niepoprawny json {"}})
+        resp = {"importance": 8, "reason": "ok", "action": "read_now", "language": "pl"}
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda acc: client,
+        ollama_client=OllamaClient(config.ollama, transport=httpx.MockTransport(mock_ollama)),
+    )
+
+    # Cykl 1: pierwsza próba dla maila 1 -> błąd, folder przerwany, mail nieoznaczony
+    res1 = run_cycle(deps)
+    assert len(res1.errors) == 1
+    assert store.get_attempts("acc", "INBOX", 9, 1) == 1
+    assert store.is_seen("acc", "INBOX", 9, 1, "<m1@b.pl>") is False
+    assert store.get_last_uid("acc", "INBOX", 9) == 0
+
+    # Cykl 2: druga próba
+    res2 = run_cycle(deps)
+    assert len(res2.errors) == 1
+    assert store.get_attempts("acc", "INBOX", 9, 1) == 2
+    assert store.is_seen("acc", "INBOX", 9, 1, "<m1@b.pl>") is False
+    assert store.get_last_uid("acc", "INBOX", 9) == 0
+
+    # Cykl 3: trzecia próba -> status='failed', last_uid przesunięte, mail 2 przetworzony
+    res3 = run_cycle(deps)
+    assert len(res3.errors) == 1
+    assert store.is_seen("acc", "INBOX", 9, 1, "<m1@b.pl>") is True
+    assert store.get_seen_status("acc", "INBOX", 9, 1) == "failed"
+
+    # Mail 2 został pomyślnie przetworzony w tym samym cyklu 3 po przeskoczeniu failed maila 1
+    assert [m.uid for m in res3.important] == [2]
+    assert store.get_last_uid("acc", "INBOX", 9) == 2
+
+
+def test_store_migration_preserves_data(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "old.db"
+    # Tworzymy starą strukturę bazy bez kolumny attempts i bez tabeli analysis_attempts
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE seen (
+            account TEXT, folder TEXT, uidvalidity INTEGER, uid INTEGER,
+            message_id TEXT, status TEXT NOT NULL DEFAULT 'new', importance INTEGER,
+            PRIMARY KEY(account, folder, uidvalidity, uid)
+        )
+    """)
+    cur.execute("INSERT INTO seen VALUES ('acc', 'INBOX', 1, 10, '<id1>', 'analyzed', 8)")
+    conn.commit()
+    conn.close()
+
+    # Otwieramy przez nową klasę Store
+    s = Store(db_path)
+    assert s.is_seen("acc", "INBOX", 1, 10, "<id1>") is True
+    assert s.get_attempts("acc", "INBOX", 1, 10) == 0
+
+    # Można inkrementować próby
+    assert s.increment_attempts("acc", "INBOX", 1, 10) == 1
+    assert s.get_attempts("acc", "INBOX", 1, 10) == 1
+    s.close()

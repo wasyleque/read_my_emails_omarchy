@@ -46,6 +46,24 @@ class Store:
             )
         """)
 
+        # Create analysis_attempts table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS analysis_attempts (
+                account TEXT,
+                folder TEXT,
+                uidvalidity INTEGER,
+                uid INTEGER,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(account, folder, uidvalidity, uid)
+            )
+        """)
+
+        # Migracja tabeli seen jeśli kolumna attempts nie istnieje
+        cursor.execute("PRAGMA table_info(seen)")
+        seen_cols = [row[1] for row in cursor.fetchall()]
+        if "attempts" not in seen_cols:
+            cursor.execute("ALTER TABLE seen ADD COLUMN attempts INTEGER DEFAULT 0")
+
         self.connection.commit()
 
     def get_last_uid(self, account: str, folder: str, uidvalidity: int) -> int:
@@ -124,7 +142,7 @@ class Store:
         importance: Optional[int] = None,
     ) -> None:
         # Validate status
-        allowed_statuses = {"new", "analyzed", "backlog_declined"}
+        allowed_statuses = {"new", "analyzed", "backlog_declined", "failed", "backlog_pending"}
         if status not in allowed_statuses:
             raise ValueError(f"Invalid status '{status}'. Must be one of {allowed_statuses}")
 
@@ -138,6 +156,62 @@ class Store:
             (account, folder, uidvalidity, uid, message_id, status, importance),
         )
 
+        self.connection.commit()
+
+    def get_seen_status(
+        self, account: str, folder: str, uidvalidity: int, uid: int
+    ) -> Optional[str]:
+        """Zwraca status z tabeli seen dla podanej wiadomości lub None."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT status FROM seen
+            WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
+            """,
+            (account, folder, uidvalidity, uid),
+        )
+        row = cursor.fetchone()
+        return str(row[0]) if row else None
+
+    def get_attempts(self, account: str, folder: str, uidvalidity: int, uid: int) -> int:
+        """Zwraca liczbę nieudanych prób analizy formatu dla wiadomości."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT attempts FROM analysis_attempts
+            WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
+            """,
+            (account, folder, uidvalidity, uid),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def increment_attempts(self, account: str, folder: str, uidvalidity: int, uid: int) -> int:
+        """Zwiększa i zwraca licznik nieudanych prób analizy dla wiadomości."""
+        current = self.get_attempts(account, folder, uidvalidity, uid)
+        new_attempts = current + 1
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO analysis_attempts
+                (account, folder, uidvalidity, uid, attempts)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (account, folder, uidvalidity, uid, new_attempts),
+        )
+        self.connection.commit()
+        return new_attempts
+
+    def clear_attempts(self, account: str, folder: str, uidvalidity: int, uid: int) -> None:
+        """Czyści licznik prób dla wiadomości."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            DELETE FROM analysis_attempts
+            WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
+            """,
+            (account, folder, uidvalidity, uid),
+        )
         self.connection.commit()
 
     def close(self):

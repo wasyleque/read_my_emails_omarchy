@@ -3,7 +3,14 @@
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
-from mailvoice.core.analyzer import AnalyzerError, OllamaClient, build_messages, pick_model
+from mailvoice.core.analyzer import (
+    AnalyzerError,
+    AnalyzerFormatError,
+    AnalyzerTransportError,
+    OllamaClient,
+    build_messages,
+    pick_model,
+)
 from mailvoice.core.config import AccountConfig, AppConfig
 from mailvoice.core.imap_fetch import (
     MailboxClient,
@@ -34,6 +41,18 @@ class ProcessedMail:
     language: str
 
 
+@dataclass(frozen=True)
+class PendingBacklog:
+    """Oczekująca na decyzję użytkownika zaległa wiadomość odtworzona z bazy seen."""
+
+    account: str
+    folder: str
+    uidvalidity: int
+    uid: int
+    message_id: str | None
+    importance: int | None
+
+
 @dataclass
 class CycleResult:
     """Wynik wykonania cyklu sprawdzania poczty."""
@@ -57,7 +76,9 @@ class PipelineDeps:
     ollama_client: OllamaClient
 
 
-def resolve_backlog(store: Store, items: Sequence[ProcessedMail], accepted: bool) -> None:
+def resolve_backlog(
+    store: Store, items: Sequence[ProcessedMail | PendingBacklog], accepted: bool
+) -> None:
     """Oznacza zaległe wiadomości w bazie store w zależności od decyzji użytkownika.
 
     accepted=True -> status 'analyzed'
@@ -65,15 +86,57 @@ def resolve_backlog(store: Store, items: Sequence[ProcessedMail], accepted: bool
     """
     status = "analyzed" if accepted else "backlog_declined"
     for item in items:
+        mid = getattr(item, "message_id", None)
+        if mid is None and hasattr(item, "mail"):
+            mid = item.mail.message_id
+        imp = getattr(item, "importance", None)
+        if imp is None and hasattr(item, "final_importance"):
+            imp = item.final_importance
         store.mark_seen(
             account=item.account,
             folder=item.folder,
             uidvalidity=item.uidvalidity,
             uid=item.uid,
-            message_id=item.mail.message_id,
+            message_id=mid,
             status=status,
-            importance=item.final_importance,
+            importance=imp,
         )
+
+
+def load_pending_backlog(store: Store, account: str | None = None) -> list[PendingBacklog]:
+    """Odczytuje z bazy seen wiadomości ze statusem 'backlog_pending' (np. po restarcie)."""
+    cursor = store.connection.cursor()
+    if account:
+        cursor.execute(
+            """
+            SELECT account, folder, uidvalidity, uid, message_id, importance
+            FROM seen
+            WHERE status = 'backlog_pending' AND account = ?
+            ORDER BY uid ASC
+            """,
+            (account,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT account, folder, uidvalidity, uid, message_id, importance
+            FROM seen
+            WHERE status = 'backlog_pending'
+            ORDER BY uid ASC
+            """
+        )
+    rows = cursor.fetchall()
+    return [
+        PendingBacklog(
+            account=r[0],
+            folder=r[1],
+            uidvalidity=r[2],
+            uid=r[3],
+            message_id=r[4],
+            importance=r[5],
+        )
+        for r in rows
+    ]
 
 
 def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
@@ -188,6 +251,36 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
 
                     try:
                         analysis = deps.ollama_client.classify(messages, model)
+                        deps.store.clear_attempts(account.name, folder, uidvalidity, uid)
+                    except AnalyzerTransportError as exc:
+                        result.errors.append(
+                            f"Błąd połączenia z Ollama dla zaległego maila UID {uid} "
+                            f"w '{account.name}/{folder}': {exc}"
+                        )
+                        backlog_ok = False
+                        break
+                    except AnalyzerFormatError as exc:
+                        attempts = deps.store.increment_attempts(
+                            account.name, folder, uidvalidity, uid
+                        )
+                        result.errors.append(
+                            f"Błąd formatu dla zaległego maila UID {uid} "
+                            f"w '{account.name}/{folder}' (próba {attempts}/3): {exc}"
+                        )
+                        if attempts >= 3:
+                            deps.store.mark_seen(
+                                account.name,
+                                folder,
+                                uidvalidity,
+                                uid,
+                                mail.message_id,
+                                status="failed",
+                                importance=0,
+                            )
+                            deps.store.clear_attempts(account.name, folder, uidvalidity, uid)
+                        else:
+                            backlog_ok = False
+                        continue
                     except AnalyzerError as exc:
                         result.errors.append(
                             f"Błąd analizy zaległego maila UID {uid} "
@@ -210,7 +303,16 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     )
 
                     if final_importance >= deps.config.importance_threshold:
-                        # Ważne zaległe NIE są oznaczane jako seen, dopóki użytkownik nie zdecyduje
+                        # Ważne zaległe zapisujemy jako backlog_pending
+                        deps.store.mark_seen(
+                            account.name,
+                            folder,
+                            uidvalidity,
+                            uid,
+                            mail.message_id,
+                            status="backlog_pending",
+                            importance=final_importance,
+                        )
                         result.backlog_important.append(processed)
                     else:
                         # Nieważne oznaczamy jako seen, aby nie analizować ich ponownie
@@ -276,11 +378,38 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
 
                 try:
                     analysis = deps.ollama_client.classify(messages, model)
+                    deps.store.clear_attempts(account.name, folder, uidvalidity, uid)
+                except AnalyzerTransportError as exc:
+                    result.errors.append(
+                        f"Błąd połączenia z Ollama dla UID {uid} w '{account.name}/{folder}': {exc}"
+                    )
+                    # Błąd transportu: oba endpointy padły, przerywamy folder
+                    break
+                except AnalyzerFormatError as exc:
+                    attempts = deps.store.increment_attempts(account.name, folder, uidvalidity, uid)
+                    result.errors.append(
+                        f"Błąd formatu odpowiedzi Ollama dla UID {uid} "
+                        f"w '{account.name}/{folder}' (próba {attempts}/3): {exc}"
+                    )
+                    if attempts >= 3:
+                        deps.store.mark_seen(
+                            account.name,
+                            folder,
+                            uidvalidity,
+                            uid,
+                            mail.message_id,
+                            status="failed",
+                            importance=0,
+                        )
+                        deps.store.clear_attempts(account.name, folder, uidvalidity, uid)
+                        last_committed_uid = max(last_committed_uid, uid)
+                        continue
+                    # Jeśli < 3 próby: nie przesuwamy wskaźnika za ten UID i ponowimy
+                    break
                 except AnalyzerError as exc:
                     result.errors.append(
                         f"Błąd analizy nowego maila UID {uid} w '{account.name}/{folder}': {exc}"
                     )
-                    # Nie oznaczamy jako seen ani nie przesuwamy wskaźnika za ten UID
                     break
 
                 final_importance = max(0, min(10, analysis.importance + rule_res.score_bonus))

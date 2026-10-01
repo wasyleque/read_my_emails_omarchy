@@ -40,7 +40,7 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 - [x] E0 Szkielet: pyproject, venv (mise python 3.12), struktura katalogów, pytest+ruff, puste okno PySide6.
 - [x] E1a core/store.py (SQLite: seen, folder_state) + testy.
 - [x] E1b core/config.py (konta, opis analizy, VIP/słowa, interwał, tryb powiadomień, endpointy Ollama) + testy.
-- [ ] E1c (otwarte, patrz GitHub Issues) core/secrets.py: Protocol SecretStore + KeyringStore (domyślny) + Fido2Store (python-fido2 hmac-secret -> AES-256-GCM, wiele kluczy, awaryjna fraza; klucz sesji w pamięci). Opcjonalnie dotyk klucza przed odczytem streszczeń na głos. Test na Windows obowiązkowy (hmac-secret/WebAuthn).
+- [x] E1c (zrobione) core/secrets.py: Protocol SecretStore + KeyringStore (domyślny) + EncryptedFileStore (AES-256-GCM + scrypt, 0600) + Fido2Store (hmac-secret, wiele kluczy, awaryjna fraza; fake dla testów, fizyczny wymaga testu na Windows issue #4). Wymuszenie SSL/TLS w imap_fetch.
 - [x] E2a textutil.py (html_to_text, clean_body, truncate_for_llm) zrobione [x].
 - [x] E2b mailparse.py (parse_raw -> ParsedMail; identyfikatory Message-ID z nawiasami <>, daty ze strefą).
 - [x] E2 core/imap_fetch.py: pobieranie nowych (UID>last), BODY.PEEK, parser tekstu (HTML->tekst), testy na mocku.
@@ -65,3 +65,10 @@ większe etapy (kilka naraz, z samoweryfikacją `ruff check . && pytest -q`). ai
 Backup: `scripts/backup-usb.sh` -> dysk USB SAMSUNG (/run/media/wasyl/SAMSUNG/mailvoice-backup); robić przed przerwami.
 Projekt założony 2026-10-02. Decyzje użytkownika: Python+PySide6; Ollama LAN+lokalny z przełączaniem; konta Gmail + własny IMAP;
 powiadomienia: reminder dźwiękowy co N min LUB pytanie głosowe; streszczenie max 3–4 zdania; start od E0.
+
+Decyzje z etapu E1c i integracji (batch 2):
+- E1c: `SecretStore` z trzema backendami (`KeyringStore`, `EncryptedFileStore` AES-256-GCM + scrypt 0600, `Fido2Store` hmac-secret z wieloma kluczami i frazą ratunkową). Wymuszenie `use_ssl` w IMAP (odmowa połączeń bez TLS/SSL).
+- Issue #1: Rozróżnienie `AnalyzerTransportError` (przerwanie folderu i ponowienie) vs `AnalyzerFormatError` (licznik prób w tabeli `analysis_attempts` w SQLite, po 3 próbach `status='failed'`, przesunięcie `last_uid` i przejście dalej).
+- Issue #2: Zaległości w stanie oczekiwania są zapisywane ze statusem `backlog_pending`. Funkcja `load_pending_backlog(store)` odtwarza je po restarcie aplikacji. Zapobiega to powtórnemu analizowaniu tych samych zaległości.
+- Punkt 4: `MailService` w `src/mailvoice/core/service.py` spina config, secret_store, store, analyzer i scheduler/notifier w pętlę sterowaną z zewnątrz `tick(now)` ze zdarzeniami (`NewImportant`, `BacklogQuestion`, `BeepReminder`, `AskReminder`, `ServiceError`), pobierając hasło tuż przed logowaniem.
+- Do weryfikacji sprzętowej: fizyczny klucz FIDO2 na Windowsie/Linuxie (issue #4).
