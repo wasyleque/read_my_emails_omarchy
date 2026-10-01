@@ -36,6 +36,17 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 4. Komentarze i teksty UI po polsku (z możliwością tłumaczenia), identyfikatory po angielsku.
 5. Nie twierdź, że test przeszedł, jeśli nie widziałeś tego w wyjściu komendy.
 
+## Zasady UX (wymóg użytkownika: interfejs „dla opornych”)
+- Pierwsze uruchomienie = **kreator krok po kroku** (konta -> test połączenia -> opis „co jest dla mnie ważne” -> głos -> gotowe).
+- Dodawanie konta: wybór dostawcy z listy (Gmail, Outlook, inny); serwery/porty/TLS uzupełniane automatycznie, „Zaawansowane” schowane.
+- Przycisk „Sprawdź połączenie” przy kontach i przy Ollamie; wynik prostym językiem (nie „IMAP4 LOGIN failed”, tylko „Hasło nie pasuje. Dla Gmaila potrzebne jest hasło aplikacji — pokażę jak”).
+- Ollama: automatyczne wykrycie, a gdy brak — prosta instrukcja instalacji i polecany model; bez ręcznego wpisywania URL-i na starcie.
+- Opis analizy: gotowe szablony do wyboru („Praca”, „Dom”, „Firma”) + pole własne; zero pojęć typu prompt/LLM/threshold (suwak „jak ostro oceniać”).
+- Duże czytelne przyciski, jedna rzecz na ekranie, podpowiedzi, wersje PL/EN interfejsu, sensowne domyślne, wszystko odwracalne.
+- Błędy zawsze po ludzku, z przyciskiem „Spróbuj ponownie” i „Co to znaczy?”; nigdy surowe wyjątki ani stack trace.
+- Głos jest głównym kanałem: krótkie, naturalne zdania, możliwość „powtórz”, „głośniej”, „wycisz”.
+- Dostępność: skróty klawiszowe, kontrast, skalowanie czcionki.
+
 ## Etapy (status: [ ] do zrobienia, [x] zrobione)
 - [x] E0 Szkielet: pyproject, venv (mise python 3.12), struktura katalogów, pytest+ruff, puste okno PySide6.
 - [x] E1a core/store.py (SQLite: seen, folder_state) + testy.
