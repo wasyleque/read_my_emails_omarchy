@@ -60,10 +60,10 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 - [x] E4 core/analyzer.py: klient Ollama, JSON schema, failover LAN/lokalny, prompt z opisem użytkownika + testy (mock httpx).
 - [x] E5 core/summarizer.py (3–4 zdania, język maila) + testy.
 - [x] E6 core/scheduler.py: cykl co N min, tryby powiadomień (reminder-beep / pytanie głosowe), osobne pytanie o zaległe ważne nieprzeczytane + testy.
-- [ ] E7 voice/tts.py (Piper PL+EN), voice/beeper.py.
-- [ ] E8 voice/stt.py (faster-whisper + VAD, push-to-talk), voice/dialog.py (tak/nie/czytaj/następny/pomiń, PL+EN).
-- [ ] E9 ui: okno główne, zasobnik, lista ważnych maili + uzasadnienie.
-- [ ] E10 ui: ustawienia (konta, opis analizy, VIP/słowa, interwał, tryb powiadomień, endpointy Ollama, głos).
+- [x] E7 voice/tts.py (Piper PL+EN), voice/beeper.py.
+- [x] E8 voice/stt.py (faster-whisper + VAD, push-to-talk), voice/dialog.py (tak/nie/czytaj/następny/pomiń, PL+EN).
+- [x] E9 ui: okno główne, zasobnik, lista ważnych maili + uzasadnienie.
+- [x] E10 ui: ustawienia (konta, opis analizy, VIP/słowa, interwał, tryb powiadomień, endpointy Ollama, głos).
 - [ ] E11 Integracja end-to-end + test na prawdziwej skrzynce (tylko odczyt).
 - [ ] E12 Pakowanie Windows/Linux.
 
@@ -82,4 +82,12 @@ Decyzje z etapu E1c i integracji (batch 2):
 - Issue #1: Rozróżnienie `AnalyzerTransportError` (przerwanie folderu i ponowienie) vs `AnalyzerFormatError` (licznik prób w tabeli `analysis_attempts` w SQLite, po 3 próbach `status='failed'`, przesunięcie `last_uid` i przejście dalej).
 - Issue #2: Zaległości w stanie oczekiwania są zapisywane ze statusem `backlog_pending`. Funkcja `load_pending_backlog(store)` odtwarza je po restarcie aplikacji. Zapobiega to powtórnemu analizowaniu tych samych zaległości.
 - Punkt 4: `MailService` w `src/mailvoice/core/service.py` spina config, secret_store, store, analyzer i scheduler/notifier w pętlę sterowaną z zewnątrz `tick(now)` ze zdarzeniami (`NewImportant`, `BacklogQuestion`, `BeepReminder`, `AskReminder`, `ServiceError`), pobierając hasło tuż przed logowaniem.
-- Do weryfikacji sprzętowej: fizyczny klucz FIDO2 na Windowsie/Linuxie (issue #4).
+
+Decyzje z etapu E7-E10 (batch 3):
+- Głos (`src/mailvoice/voice/`): protokoły `Speaker`, `Listener`, `Beeper`, maszyna stanów `VoiceDialog` z normalizacją wypowiedzi (NFKD + zamiana znaku 'ł'/'Ł'), obsługa komend (tak/nie/następny/powtórz/pomiń/stop/głośniej/ciszej), hak `confirm_presence` dla FIDO2. Leniwe importy `piper`, `sounddevice`, `faster-whisper`.
+- GUI (`src/mailvoice/ui/`): brak logiki biznesowej w widżetach, cała komunikacja przez `MailService` i zdarzenia `ServiceEventBridge`. `SetupWizard` krok po kroku wg zasad UX, `MainWindow` ze statusem, tabelą maili, akcją odsłuchania i zasobnikiem systemowym `QSystemTrayIcon`. Tłumaczenia PL+EN w `ui/i18n.py` z testem parytetu kluczy. Tabela dostawców poczty w `core/providers.py` i przyjazne komunikaty błędów w `core/friendly_errors.py`.
+- Rzeczy NIE zweryfikowane na fizycznym sprzęcie:
+  1. Fizyczny mikrofon/głośnik (zweryfikowano testami Fake* i mockami PySide6).
+  2. Zewnętrzna instalacja binarki Piper TTS na systemie hosta.
+  3. Środowisko Windows (testowano na Linuxie w trybie offscreen).
+  4. Fizyczny klucz FIDO2 (issue #4).

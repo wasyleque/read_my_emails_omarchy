@@ -33,13 +33,43 @@ szyfrowanie kluczem FIDO2). Treści maili i haseł nie logujemy.
 | Parser maili, czyszczenie HTML/cytatów | ✅ |
 | Reguły (VIP, słowa kluczowe, blokady, odpowiedzi) | ✅ |
 | Klient Ollamy (JSON schema, failover LAN/lokalny), streszczenia | ✅ |
-| Pobieranie IMAP, zaległe nieprzeczytane, pipeline, scheduler | ✅ (testy na fake'ach, nie sprawdzone na prawdziwych skrzynkach) |
-| Sejf haseł (keyring, opcjonalnie FIDO2) | ⏳ |
-| Głos: STT (faster-whisper), TTS (Piper), dialog | ⏳ |
-| GUI (PySide6), ustawienia, zasobnik systemowy | ⏳ |
-| Pakowanie Windows / Linux | ⏳ |
+| Pobieranie IMAP, zaległe nieprzeczytane, pipeline, scheduler, serwis | ✅ |
+| Sejf haseł (KeyringStore, EncryptedFileStore AES-256-GCM, FIDO2 HMAC-secret) | ✅ |
+| Głos: TTS (Piper PL/EN), STT (faster-whisper), dialog, komendy, beeper | ✅ (protokoły, fake'i i backendy) |
+| GUI (PySide6): kreator startowy, okno główne, zasobnik, i18n PL/EN | ✅ |
+| Integracja end-to-end na fizycznej skrzynce / pakowanie (.exe / AppImage) | ⏳ |
 
 Szczegółowy plan i decyzje architektoniczne: [`AGENTS.md`](AGENTS.md).
+
+## Instalacja dla użytkownika
+
+### 1. Pobierz i uruchom Ollamę (Sztuczna Inteligencja)
+Pobierz instalator ze strony [ollama.com](https://ollama.com) i zainstaluj program.
+W terminalu / wierszu poleceń pobierz polecany model AI:
+```bash
+ollama run qwen3:8b
+# lub polski model:
+ollama run qooba/bielik-11b-v3.0-instruct
+```
+
+### 2. Synteza mowy (Piper TTS — zalecane)
+Aplikacja czyta podsumowania na głos za pomocą szybkiego, lokalnego syntezatora Piper:
+- Pobierz binarkę `piper` z [GitHub Piper Releases](https://github.com/rhasspy/piper/releases) i dodaj ją do ścieżki systemowej `PATH`.
+- Pobierz model głosu (np. polski `pl_PL-darkman-medium.onnx` wraz z plikiem `.json`).
+*(W przypadku braku Pipera aplikacja wyświetla czytelne powiadomienie lub korzysta z sygnałów dźwiękowych).*
+
+### 3. Uruchomienie aplikacji MailVoice
+Zainstaluj pakiet z opcjonalnymi zależnościami głosu:
+```bash
+pip install -e ".[voice]"
+python -m mailvoice
+```
+Przy pierwszym uruchomieniu powita Cię prosty kreator krok po kroku:
+1. Wybór języka (Polski / English),
+2. Podłączenie konta pocztowego (automatyczne szablony: Gmail, Outlook, WP, Onet, O2, Interia, własny IMAP),
+3. Automatyczne wykrycie Ollamy i zainstalowanych modeli,
+4. Szablon reguł (Praca / Dom / Firma) oraz suwak ostrości oceny,
+5. Wybór powiadomień (pytanie głosowe lub dyskretny beep) i test głosu.
 
 ## Uruchomienie (dev)
 
@@ -47,14 +77,10 @@ Wymagany Python 3.12.
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,voice]"
 ruff check . && python -m pytest -q
-QT_QPA_PLATFORM=offscreen python -m mailvoice   # puste okno (GUI w budowie)
+QT_QPA_PLATFORM=offscreen python -m mailvoice
 ```
-
-Do analizy potrzebny jest działający [Ollama](https://ollama.com) (adres konfigurowalny, domyślnie lokalny z
-opcjonalnym drugim serwerem w LAN). Dla polskiego polecany model `qooba/bielik-11b-v3.0-instruct`,
-dla angielskiego np. `qwen3:8b`.
 
 ## Współpraca
 
