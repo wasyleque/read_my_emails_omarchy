@@ -201,6 +201,37 @@ BRAND_DOMAINS: dict[str, tuple[str, ...]] = {
 }
 
 
+# Zwroty wyłudzające dane logowania/płatnicze (silniejszy sygnał niż samo „pilne”).
+CREDENTIAL_LURE_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\b(zaloguj|zalogować|logowani[ae])\b",
+        r"\b(log ?in|sign ?in)\b",
+        r"\b(podaj|wprowad[źz]|zaktualizuj|potwierd[źz]|zweryfikuj|odblokuj)\b.{0,40}"
+        r"\b(has[łl]|dane|kart|konto|tożsamo|tozsamo|pin)",
+        r"\b(verify|confirm|update|enter|unlock)\b.{0,40}"
+        r"\b(password|account|identity|card|payment|login|credentials)",
+        r"\b(has[łl]o|password)\b.{0,30}\b(wygasa|wygasł|expires?|expired|reset)",
+        r"\b(kod sms|kod autoryzacyjny|numer karty|card number|cvv)\b",
+    )
+]
+
+
+def _mentions_brand(brand: str, text: str) -> bool:
+    """Marka jako CAŁE słowo (inaczej „ing” pasowałoby do „marketing”, „shopping”)."""
+    return (
+        re.search(rf"(?<![a-z0-9ąćęłńóśźż]){re.escape(brand)}(?![a-z0-9ąćęłńóśźż])", text)
+        is not None
+    )
+
+
+def _related_hosts(host: str, domain: str) -> bool:
+    """Czy host linku należy do tej samej organizacji co domena nadawcy (też subdomeny)."""
+    if not host or not domain:
+        return False
+    return host == domain or host.endswith(f".{domain}") or domain.endswith(f".{host}")
+
+
 def _extract_domain(addr: str) -> str:
     """Wyciąga domenę z adresu e-mail."""
     clean = parseaddr(addr)[1] if "@" in addr else addr
@@ -393,7 +424,9 @@ def assess(
         has_hidden = True
 
     if has_hidden:
-        score += 30
+        # Newslettery masowo wypełniają podgląd znakami zero-width, więc samo to nie czyni maila
+        # „średnim ryzykiem”; w połączeniu z innymi sygnałami (link, pośpiech) próg i tak padnie.
+        score += 15
         flags.add("hidden_text")
         reasons.append("Wykryto ukryty tekst lub znaki kontrolne Unicode")
 
@@ -406,10 +439,19 @@ def assess(
             break
 
     # 8. Brand Impersonation
-    if clean_sender_addr not in known_lower and clean_sender_addr not in my_lower:
+    # Nadawca z oficjalnej domeny którejkolwiek znanej marki (np. Allegro piszące o paczce InPost)
+    # nie jest podszywaniem się; prawdziwe podrobienie domeny łapie test SPF/DKIM/DMARC.
+    from_any_official = any(
+        _related_hosts(sender_domain, dom) for doms in BRAND_DOMAINS.values() for dom in doms
+    )
+    if (
+        clean_sender_addr not in known_lower
+        and clean_sender_addr not in my_lower
+        and not from_any_official
+    ):
         sender_full_lower = mail.sender.lower()
         for brand, official_domains in BRAND_DOMAINS.items():
-            if brand in sender_full_lower or brand in subject_lower:
+            if _mentions_brand(brand, sender_full_lower) or _mentions_brand(brand, subject_lower):
                 # Sprawdzamy czy domena nadawcy odpowiada oficjalnym domenom marki
                 is_official = any(
                     sender_domain == dom or sender_domain.endswith(f".{dom}")
@@ -423,6 +465,40 @@ def assess(
                         f"z nieautoryzowanej domeny ({sender_domain})"
                     )
                     break
+
+    # 9. Sygnały złożone (pojedynczo słabe, razem typowe dla wyłudzenia danych)
+    link_hosts = {urlparse(lnk).netloc.lower() for lnk in mail.links if lnk}
+    for netloc in sorted(link_hosts):
+        if "@" in netloc:  # https://bank.pl@zlosliwa.xyz — widoczna „domena” to tylko login
+            score += 40
+            flags.add("link_userinfo")
+            reasons.append("Link ukrywa prawdziwy adres docelowy za znakiem @")
+            break
+    for netloc in sorted(link_hosts):
+        if "xn--" in netloc.split(":")[0]:
+            score += 30
+            flags.add("punycode_link")
+            reasons.append("Link prowadzi do domeny zapisanej punycode (możliwa podróbka znaków)")
+            break
+
+    sender_known = clean_sender_addr in known_lower or clean_sender_addr in my_lower
+    foreign_hosts = sorted(
+        h
+        for h in (n.split("@")[-1].split(":")[0] for n in link_hosts)
+        if h and not _related_hosts(h, sender_domain)
+    )
+    lure = any(p.search(text_to_scan) for p in CREDENTIAL_LURE_PATTERNS)
+    if lure and foreign_hosts and not sender_known:
+        score += 40
+        flags.add("credential_request_link")
+        reasons.append(
+            "Prośba o dane logowania/płatnicze razem z linkiem do obcej domeny "
+            f"({defang_url(foreign_hosts[0])})"
+        )
+    elif urgency_matches and foreign_hosts and not sender_known:
+        score += 15
+        flags.add("urgency_foreign_link")
+        reasons.append("Wymuszenie pośpiechu razem z linkiem do domeny innej niż nadawca")
 
     final_score = min(100, score)
     if final_score >= 50:

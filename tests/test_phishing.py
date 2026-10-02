@@ -152,7 +152,17 @@ def test_assess_hidden_text_zero_width():
     )
     result = assess(mail)
     assert "hidden_text" in result.flags
-    assert result.score >= 30
+    assert result.risk == "low"  # samo to bywa w newsletterach (wypełniacz podglądu)
+
+
+def test_hidden_text_combined_with_credential_lure_escalates():
+    mail = _make_mail(
+        sender="Obsługa <info@bank-obsluga.pl>",
+        subject="Konto",
+        body="Zaloguj się i podaj hasło\u200b\u200c https://x.example.org/a",
+        links=("https://x.example.org/a",),
+    )
+    assert assess(mail).risk == "high"
 
 
 def test_assess_prompt_injection():
@@ -192,3 +202,88 @@ def test_assess_bank_phishing_combination():
     assert "auth_fail" in result.flags
     assert "suspicious_link" in result.flags
     assert "urgency_or_credentials" in result.flags
+
+
+# ---------- sygnały złożone (wyłudzenie danych) ----------
+def test_credential_request_with_foreign_link_is_at_least_medium():
+    mail = _make_mail(
+        sender="Biuro <biuro@firma-kurierska.pl>",
+        subject="Potwierdź dane",
+        body="Zaloguj się i podaj hasło, aby odblokować przesyłkę.",
+        links=("https://odbierz-paczke.example.net/login",),
+    )
+    r = assess(mail)
+    assert "credential_request_link" in r.flags
+    assert r.risk in ("medium", "high")
+
+
+def test_credential_request_with_urgency_and_foreign_link_is_high():
+    mail = _make_mail(
+        sender="Obsługa <info@bank-obsluga.pl>",
+        subject="Pilne: konto zablokowane",
+        body="Pilne! Zweryfikuj konto i zaloguj się natychmiast: https://x.example.org/a",
+        links=("https://x.example.org/a",),
+    )
+    assert assess(mail).risk == "high"
+
+
+def test_login_link_to_the_senders_own_domain_is_not_flagged():
+    mail = _make_mail(
+        sender="Serwis <no-reply@sklep.pl>",
+        subject="Reset hasła",
+        body="Aby zresetować hasło, zaloguj się: https://konto.sklep.pl/reset",
+        links=("https://konto.sklep.pl/reset",),
+    )
+    r = assess(mail)
+    assert "credential_request_link" not in r.flags
+    assert r.risk == "low"
+
+
+def test_known_sender_is_not_flagged_for_foreign_link():
+    mail = _make_mail(
+        sender="jan@partner.pl",
+        body="Zaloguj się do wspólnego dysku: https://dysk.example.net/x",
+        links=("https://dysk.example.net/x",),
+    )
+    assert "credential_request_link" not in assess(mail, known_contacts=["jan@partner.pl"]).flags
+
+
+def test_userinfo_trick_in_link_is_flagged():
+    mail = _make_mail(links=("https://moj-bank.pl@zlosliwa.example.xyz/login",))
+    r = assess(mail)
+    assert "link_userinfo" in r.flags
+    assert r.score >= 40
+
+
+def test_punycode_link_is_flagged():
+    r = assess(_make_mail(links=("https://xn--bnk-sq4a.example.com/",)))
+    assert "punycode_link" in r.flags
+
+
+def test_plain_newsletter_with_tracking_link_stays_low():
+    mail = _make_mail(
+        sender="News <news@sklep.pl>",
+        subject="Nowa oferta",
+        body="Zobacz nasze nowości.",
+        links=("https://tracking.example.net/c/1",),
+    )
+    assert assess(mail).risk == "low"
+
+
+def test_brand_must_match_as_a_whole_word():
+    """Regresja z prawdziwej poczty: „ing” pasowało do „marketing”/„shopping”."""
+    mail = _make_mail(sender="Oferty <oferty@sklep.pl>", subject="Digital marketing i shopping")
+    assert "brand_impersonation" not in assess(mail).flags
+
+
+def test_real_brand_impersonation_is_still_detected():
+    mail = _make_mail(sender="ING Bank <powiadomienie@ing-bezpieczenstwo.xyz>", subject="Konto")
+    assert "brand_impersonation" in assess(mail).flags
+
+
+def test_official_domain_of_another_brand_is_not_impersonation():
+    """Regresja z prawdziwej poczty: Allegro (allegromail.pl) piszące o paczce InPost."""
+    mail = _make_mail(
+        sender="Allegro <powiadomienia@allegromail.pl>", subject="Paczka InPost w drodze"
+    )
+    assert "brand_impersonation" not in assess(mail).flags
