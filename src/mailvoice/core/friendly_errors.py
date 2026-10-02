@@ -11,6 +11,18 @@ def format_friendly_error(exc: Any, lang: str = "pl") -> str:
     raw_str = str(exc).lower() if exc is not None else ""
     is_pl = lang.lower() == "pl"
 
+    # 0. Model AI nie istnieje na serwerze Ollama (HTTP 404)
+    if "http 404" in raw_str and ("model" in raw_str or "serwery ai" in raw_str):
+        if is_pl:
+            return (
+                "Wybrany model AI nie jest zainstalowany na serwerze Ollama. "
+                "Otwórz Ustawienia i wybierz model z listy zainstalowanych."
+            )
+        return (
+            "The selected AI model is not installed on the Ollama server. "
+            "Open Settings and pick a model from the installed list."
+        )
+
     # 1. Specyficzne dla Gmaila hasło aplikacji / 2FA
     if (
         "application-specific password" in raw_str

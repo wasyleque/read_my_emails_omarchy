@@ -360,3 +360,13 @@ def test_settings_dialog_details_toggle(qapp, tmp_path):
     assert not dlg.btn_details.isVisible()
     assert not dlg.txt_details.isVisible()
     dlg.close()
+
+
+def test_error_shows_details_button_with_raw_message(qapp):
+    """Regresja: komunikat obiecywał „kliknij Szczegóły”, a przycisku w oknie głównym nie było."""
+    window = MainWindow(speaker=FakeSpeaker())
+    assert not window.btn_error_details.isVisibleTo(window)
+    window._show_problem("Serwery AI zawiodły: http://x:11434 -> HTTP 404 (model nie znaleziony)")
+    assert window.btn_error_details.isVisibleTo(window)
+    assert "HTTP 404" in window._last_error_details
+    assert "model AI" in window.lbl_status.text()  # prosty komunikat po ludzku

@@ -168,6 +168,11 @@ class MainWindow(QMainWindow):
         self.lbl_status = QLabel(tr("status_ready"))
         self.lbl_status.setStyleSheet("font-size: 13px; font-weight: bold; color: #1a5fb4;")
         status_bar_layout.addWidget(self.lbl_status)
+        self._last_error_details = ""
+        self.btn_error_details = QPushButton(tr("btn_details"))
+        self.btn_error_details.setVisible(False)
+        self.btn_error_details.clicked.connect(self._show_error_details)
+        status_bar_layout.addWidget(self.btn_error_details)
         status_bar_layout.addStretch()
 
         self.lbl_last_check = QLabel(f"{tr('status_last_check')} {tr('status_never')}")
@@ -374,6 +379,7 @@ class MainWindow(QMainWindow):
         if not self.service:
             return
         self.lbl_status.setText(tr("status_checking"))
+        self.btn_error_details.setVisible(False)
         self.btn_check_now.setEnabled(False)
 
         self.worker = CycleWorker(self.service, check_backlog=check_backlog)
@@ -395,10 +401,24 @@ class MainWindow(QMainWindow):
             for item in result.suspicious:
                 self._add_important_mail(item)
 
+    def _show_problem(self, raw_message: str) -> None:
+        """Pokazuje prosty komunikat w pasku statusu i przycisk ze szczegółami technicznymi."""
+        friendly = format_friendly_error(raw_message, lang=get_language())
+        self.lbl_status.setText(f"Problem: {friendly}")
+        self._last_error_details = str(raw_message)
+        self.btn_error_details.setVisible(True)
+
+    def _show_error_details(self) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("MailVoice")
+        box.setText(tr("btn_details"))
+        box.setDetailedText(self._last_error_details)
+        box.exec()
+
     def _on_cycle_error(self, err_msg: str) -> None:
         self.btn_check_now.setEnabled(True)
-        friendly = format_friendly_error(err_msg, lang=get_language())
-        self.lbl_status.setText(f"Problem: {friendly}")
+        self._show_problem(err_msg)
 
     def _add_important_mail(self, item: ProcessedMail) -> None:
         if any(
@@ -530,8 +550,7 @@ class MainWindow(QMainWindow):
                 self.beeper.beep()
 
         elif isinstance(event, ServiceError):
-            friendly = format_friendly_error(event.message, lang=get_language())
-            self.lbl_status.setText(f"Problem: {friendly}")
+            self._show_problem(event.message)
 
         elif isinstance(event, DigestReady):
             self._display_digest(event.digest)

@@ -7,6 +7,7 @@ from mailvoice.core.analyzer import (
     ANALYSIS_SCHEMA,
     Analysis,
     AnalyzerError,
+    AnalyzerTransportError,
     OllamaClient,
     build_messages,
     pick_model,
@@ -223,3 +224,18 @@ def test_build_messages_neutralizes_delimiters():
     # Prawdziwe znaczniki są nienaruszone
     assert user_msg.startswith("<<<MAIL_DANE_NIEZAUFANE_my_real_nonce>>>")
     assert user_msg.endswith("<<<KONIEC_my_real_nonce>>>")
+
+
+def test_failover_error_keeps_root_cause_not_only_last_endpoint():
+    """Regresja: błąd 404 (brak modelu) z LAN ginął pod „connection refused” z lokalnego."""
+
+    def handler(request):
+        if request.url.host == "192.168.0.50":
+            return httpx.Response(404, json={"error": "model not found"})
+        raise httpx.ConnectError("refused")
+
+    cfg = OllamaConfig(lan_url="http://192.168.0.50:11434", prefer="lan")
+    client = OllamaClient(cfg, transport=httpx.MockTransport(handler))
+    with pytest.raises(AnalyzerTransportError) as exc:
+        client.classify([{"role": "user", "content": "x"}], "m")
+    assert "HTTP 404" in str(exc.value) and "model nie znaleziony" in str(exc.value)

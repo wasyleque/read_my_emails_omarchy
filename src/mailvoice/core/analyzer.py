@@ -122,7 +122,7 @@ class OllamaClient:
             else [self.cfg.local_url, self.cfg.lan_url]
         )
 
-        last_error = None
+        errors: list[str] = []
 
         for url in urls:
             try:
@@ -142,11 +142,11 @@ class OllamaClient:
 
                 return _parse_response(response)
             except httpx.HTTPError as e:
-                last_error = e
+                errors.append(_describe_endpoint_error(url, e))
                 continue
 
         # If we get here, all URLs failed
-        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
+        raise AnalyzerTransportError("Serwery AI zawiodły: " + "; ".join(errors))
 
     def chat_text(self, messages: List[Dict], model: str) -> str:
         """Wysyła zapytanie do Ollamy i zwraca treść odpowiedzi jako zwykły tekst."""
@@ -156,7 +156,7 @@ class OllamaClient:
             else [self.cfg.local_url, self.cfg.lan_url]
         )
 
-        last_error = None
+        errors: list[str] = []
 
         for url in urls:
             try:
@@ -175,10 +175,10 @@ class OllamaClient:
                 content = str(data.get("message", {}).get("content", "")).strip()
                 return content
             except (httpx.HTTPError, KeyError, ValueError) as e:
-                last_error = e
+                errors.append(_describe_endpoint_error(url, e))
                 continue
 
-        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
+        raise AnalyzerTransportError("Serwery AI zawiodły: " + "; ".join(errors))
 
     def chat_json(self, messages: List[Dict], model: str, schema: dict) -> dict:
         """Wysyła zapytanie do Ollamy ze zdefiniowanym schematem JSON i zwraca słownik."""
@@ -188,7 +188,7 @@ class OllamaClient:
             else [self.cfg.local_url, self.cfg.lan_url]
         )
 
-        last_error = None
+        errors: list[str] = []
 
         for url in urls:
             try:
@@ -211,10 +211,10 @@ class OllamaClient:
                 except (ValueError, json.JSONDecodeError) as exc:
                     raise AnalyzerFormatError(f"Niepoprawny JSON z Ollamy: {exc}") from exc
             except (httpx.HTTPError, KeyError) as e:
-                last_error = e
+                errors.append(_describe_endpoint_error(url, e))
                 continue
 
-        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
+        raise AnalyzerTransportError("Serwery AI zawiodły: " + "; ".join(errors))
 
 
 def _parse_response(response: httpx.Response) -> Analysis:
@@ -250,3 +250,16 @@ def fetch_ollama_models(
             return [m["name"] for m in data.get("models", []) if "name" in m]
     except Exception:
         return []
+
+
+def _describe_endpoint_error(url: str, exc: Exception) -> str:
+    """Krótki, bezpieczny opis błędu jednego serwera (bez treści zapytania i odpowiedzi)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        extra = " (model nie znaleziony na serwerze)" if code == 404 else ""
+        return f"{url} -> HTTP {code}{extra}"
+    if isinstance(exc, httpx.TimeoutException):
+        return f"{url} -> przekroczono czas oczekiwania"
+    if isinstance(exc, httpx.ConnectError):
+        return f"{url} -> połączenie odrzucone lub brak serwera"
+    return f"{url} -> {type(exc).__name__}"

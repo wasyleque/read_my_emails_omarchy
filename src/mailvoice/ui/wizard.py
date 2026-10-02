@@ -29,6 +29,7 @@ from mailvoice.core.analyzer import fetch_ollama_models
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig
 from mailvoice.core.friendly_errors import format_friendly_error_ex
 from mailvoice.core.imap_fetch import ImapToolsClient
+from mailvoice.core.ollama_models import suggest_models
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
 from mailvoice.ui.i18n import get_language, set_language, tr
@@ -349,6 +350,9 @@ class OllamaPage(QWizardPage):
         self.txt_lan_url = QLineEdit("http://192.168.1.50:11434")
         adv_form.addRow("Local URL:", self.txt_local_url)
         adv_form.addRow("LAN URL:", self.txt_lan_url)
+        # zmiana adresu = ponowne wykrycie modeli
+        self.txt_lan_url.editingFinished.connect(self._detect_ollama)
+        self.txt_local_url.editingFinished.connect(self._detect_ollama)
         layout.addWidget(self.adv_group)
 
         layout.addStretch()
@@ -357,21 +361,23 @@ class OllamaPage(QWizardPage):
         self._detect_ollama()
 
     def _detect_ollama(self) -> None:
-        models = self._fetch_models("http://127.0.0.1:11434")
-        if not models:
-            models = self._fetch_models(self.txt_lan_url.text().strip())
+        local_models = self._fetch_models(self.txt_local_url.text().strip())
+        self._detected_local = bool(local_models)
+        models = local_models or self._fetch_models(self.txt_lan_url.text().strip())
+        self._suggestion = suggest_models(models)
 
         self.cb_model.clear()
-        if models:
+        if self._suggestion.choices:
             self.lbl_status.setStyleSheet("color: green; font-weight: bold;")
             self.lbl_status.setText(tr("step3_detected"))
             self.lbl_guide.setVisible(False)
-            for m in models:
-                self.cb_model.addItem(m)
+            for m in self._suggestion.choices:
+                self.cb_model.addItem(m)  # zalecane na górze; tylko zainstalowane, bez chmurowych
         else:
             self.lbl_status.setStyleSheet("color: #b85d00; font-weight: bold;")
             self.lbl_status.setText(tr("step3_not_detected"))
             self.lbl_guide.setVisible(True)
+            self.adv_group.setChecked(True)  # pokaż pole adresu serwera, żeby można było go wpisać
             self.cb_model.addItem("qwen3:8b")
             self.cb_model.addItem("qooba/bielik-11b-v3.0-instruct")
 
@@ -380,12 +386,14 @@ class OllamaPage(QWizardPage):
 
     def get_ollama_config(self) -> OllamaConfig:
         model = self.cb_model.currentText() or "qwen3:8b"
+        suggestion = getattr(self, "_suggestion", None)
+        polish = (suggestion.polish if suggestion else None) or model
         return OllamaConfig(
             lan_url=self.txt_lan_url.text().strip(),
             local_url=self.txt_local_url.text().strip(),
             model=model,
-            polish_model="qooba/bielik-11b-v3.0-instruct",
-            prefer="local" if "127.0.0.1" in self.txt_local_url.text() else "lan",
+            polish_model=polish,
+            prefer="local" if getattr(self, "_detected_local", False) else "lan",
         )
 
 

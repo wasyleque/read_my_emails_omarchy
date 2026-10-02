@@ -61,13 +61,16 @@ def check_ollama(cfg: AppConfig) -> bool:
     return found
 
 
-def check_account(acc: AccountConfig, cfg: AppConfig, store_secret, days: int) -> bool:
+def check_account(
+    acc: AccountConfig, cfg: AppConfig, store_secret, days: int, idx: int = 1
+) -> bool:
+    label = f"konto {idx}"
     secret = store_secret.get(acc.name)
-    report(OK if secret else FAIL, f"[{acc.name}] hasło w sejfie: {'jest' if secret else 'BRAK'}")
+    report(OK if secret else FAIL, f"[{label}] hasło w sejfie: {'jest' if secret else 'BRAK'}")
     if not secret:
         return False
     if not acc.use_ssl:
-        report(FAIL, f"[{acc.name}] TLS wyłączony — aplikacja odmawia takiego połączenia")
+        report(FAIL, f"[{label}] TLS wyłączony — aplikacja odmawia takiego połączenia")
         return False
     client = ImapToolsClient(
         host=acc.host, port=acc.port, username=acc.username, password=secret, use_ssl=True
@@ -78,7 +81,7 @@ def check_account(acc: AccountConfig, cfg: AppConfig, store_secret, days: int) -
         uidv = client.get_uidvalidity(folder)
         report(
             OK,
-            f"[{acc.name}] logowanie i folder '{folder}' OK ({time.time() - t0:.1f}s), "
+            f"[{label}] logowanie i folder '{folder}' OK ({time.time() - t0:.1f}s), "
             f"UIDVALIDITY ustalone: {bool(uidv)}",
         )
         all_uids = client.get_uids_greater_than(folder, 0)
@@ -86,7 +89,7 @@ def check_account(acc: AccountConfig, cfg: AppConfig, store_secret, days: int) -
         unseen_before = client.get_unseen_uids(folder, since)
         report(
             OK,
-            f"[{acc.name}] wiadomości w folderze: {len(all_uids)}, "
+            f"[{label}] wiadomości w folderze: {len(all_uids)}, "
             f"nieprzeczytane z ostatnich {days} dni: {len(unseen_before)}",
         )
         if acc.sent_folder:
@@ -94,13 +97,13 @@ def check_account(acc: AccountConfig, cfg: AppConfig, store_secret, days: int) -
                 sent = client.get_sent_message_ids(acc.sent_folder, since)
                 report(
                     OK,
-                    f"[{acc.name}] folder wysłanych '{acc.sent_folder}' OK, "
+                    f"[{label}] folder wysłanych '{acc.sent_folder}' OK, "
                     f"wiadomości z {days} dni: {len(sent)}",
                 )
             except Exception as exc:
                 report(
                     WARN,
-                    f"[{acc.name}] folder wysłanych '{acc.sent_folder}' niedostępny "
+                    f"[{label}] folder wysłanych '{acc.sent_folder}' niedostępny "
                     f"({type(exc).__name__}) — popraw nazwę w ustawieniach",
                 )
         # dowód read-only: pobranie treści NIE może zmienić liczby nieprzeczytanych
@@ -111,19 +114,19 @@ def check_account(acc: AccountConfig, cfg: AppConfig, store_secret, days: int) -
             same = len(unseen_after) == len(unseen_before)
             report(
                 OK if same else FAIL,
-                f"[{acc.name}] read-only: nieprzeczytane przed={len(unseen_before)} "
+                f"[{label}] read-only: nieprzeczytane przed={len(unseen_before)} "
                 f"po pobraniu={len(unseen_after)} -> "
                 f"{'flagi nietknięte' if same else 'ZMIENIONE!'}",
             )
         else:
             report(
                 WARN,
-                f"[{acc.name}] brak nieprzeczytanych — dowód read-only pominięty "
+                f"[{label}] brak nieprzeczytanych — dowód read-only pominięty "
                 "(wyślij sobie 1-2 maile i nie otwieraj ich)",
             )
         return True
     except Exception as exc:
-        report(FAIL, f"[{acc.name}] błąd IMAP: {type(exc).__name__}")
+        report(FAIL, f"[{label}] błąd IMAP: {type(exc).__name__}")
         return False
     finally:
         try:
@@ -204,7 +207,7 @@ def main() -> int:
         return 1
 
     llm_ok = check_ollama(cfg)
-    results = [check_account(a, cfg, secrets, args.days) for a in accounts]
+    results = [check_account(a, cfg, secrets, args.days, i + 1) for i, a in enumerate(accounts)]
     if all(results):
         cfg = dataclasses.replace(cfg, accounts=accounts)
         run_analysis(cfg, secrets, args.days, args.max_analyze, llm=llm_ok and not args.no_llm)
