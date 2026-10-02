@@ -65,3 +65,12 @@ secrets.json
 *.pem
 *.key
 docs/private/
+
+# Android (build, lokalne ustawienia, pliki IDE)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
