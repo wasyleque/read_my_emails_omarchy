@@ -75,6 +75,45 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 Szczegóły i decyzje architektoniczne: [`AGENTS.md`](AGENTS.md). Otwarte zadania są w [Issues](../../issues) —
 kilka nadaje się na dobry początek.
 
+## Omarchy / Arch Linux (platforma główna)
+
+MailVoice powstaje i jest testowany na [Omarchy](https://omarchy.org) (Arch, Hyprland, Wayland). Kilka rzeczy typowych dla Archa:
+
+- **Menedżer pakietów to `pacman`, nie `apt`**: `sudo pacman -S <pakiet>` (nie `pacman install`). Do głosu **nie potrzebujesz
+  żadnego pakietu systemowego** — Piper i `sounddevice` instalują się przez `pip`; PortAudio i PipeWire są w Omarchy.
+- **Python 3.12 przez `mise`.** Arch ma najnowszy Python (3.14), dla którego część zależności nie ma jeszcze gotowych
+  paczek. Omarchy zawiera `mise`, więc użyj go do lokalnej wersji 3.12:
+  ```bash
+  mise install python@3.12
+  git clone https://github.com/wasyleque/read_my_emails_omarchy.git && cd read_my_emails_omarchy
+  "$(mise where python@3.12)/bin/python3.12" -m venv .venv
+  source .venv/bin/activate
+  pip install -e ".[voice]"
+  ```
+- **Ollama**: `sudo pacman -S ollama` (z kartą NVIDIA: `ollama-cuda`), potem `ollama pull qwen3:8b`. Kreator wykrywa ją
+  automatycznie; działa też Ollama na innym komputerze w sieci LAN (adres wpisz w sekcji *Zaawansowane*).
+- **Hasła** trafiają do pęku kluczy Omarchy (`gnome-keyring` / Secret Service) — nic nie trzeba konfigurować.
+- **Uruchomienie:** `python -m mailvoice` albo po prostu `mailvoice` (w środowisku venv). ⚠️ Wpisanie
+  `python -m mail<Tab>` może dopełnić się do wbudowanego modułu `mailbox`, który nic nie robi — wpisz całą nazwę `mailvoice`.
+- **Wpis w menu aplikacji** (pojawi się w launcherze Omarchy):
+  ```bash
+  mkdir -p ~/.local/share/applications
+  cat > ~/.local/share/applications/mailvoice.desktop <<EOF
+  [Desktop Entry]
+  Type=Application
+  Name=MailVoice
+  Comment=Głosowy asystent poczty
+  Exec=$PWD/.venv/bin/python -m mailvoice
+  Terminal=false
+  Categories=Network;Email;
+  EOF
+  ```
+- **Start razem z sesją** — dopisz do `~/.config/hypr/autostart.lua`:
+  ```lua
+  o.launch_on_start("/pełna/ścieżka/do/read_my_emails_omarchy/.venv/bin/python -m mailvoice")
+  ```
+- **Logi** do diagnozy: `~/.local/state/mailvoice/log/mailvoice.log`.
+
 ## Instalacja (dla użytkownika)
 
 > Na razie bez gotowego instalatora. Potrzebny Python 3.12.

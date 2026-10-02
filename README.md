@@ -76,6 +76,45 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 Details and architecture decisions: [`AGENTS.md`](AGENTS.md). Open work is tracked in
 [Issues](../../issues) — several are good places to start.
 
+## Omarchy / Arch Linux (primary platform)
+
+MailVoice is built and tested on [Omarchy](https://omarchy.org) (Arch, Hyprland, Wayland). A few Arch specifics:
+
+- **Package manager is `pacman`, not `apt`**: `sudo pacman -S <package>` (not `pacman install`). You need no system
+  package for voice — Piper and `sounddevice` come from `pip`; PortAudio and PipeWire ship with Omarchy.
+- **Python 3.12 via `mise`.** Arch ships the newest Python (3.14) for which some dependencies have no wheels yet.
+  Omarchy includes `mise`, so use it for a project-local 3.12:
+  ```bash
+  mise install python@3.12
+  git clone https://github.com/wasyleque/read_my_emails_omarchy.git && cd read_my_emails_omarchy
+  "$(mise where python@3.12)/bin/python3.12" -m venv .venv
+  source .venv/bin/activate
+  pip install -e ".[voice]"
+  ```
+- **Ollama**: `sudo pacman -S ollama` (GPU users: `ollama-cuda`), then `ollama pull qwen3:8b`. The wizard detects it
+  automatically; an Ollama on another machine in your LAN works too (enter its address under *Advanced*).
+- **Passwords** go to the Omarchy keyring (`gnome-keyring` / Secret Service) — nothing to configure.
+- **Run:** `python -m mailvoice` or simply `mailvoice` (inside the venv). ⚠️ Typing `python -m mail<Tab>` may
+  complete to the stdlib `mailbox` module, which does nothing — type the full name `mailvoice`.
+- **Launcher entry** (shows up in the Omarchy app menu):
+  ```bash
+  mkdir -p ~/.local/share/applications
+  cat > ~/.local/share/applications/mailvoice.desktop <<EOF
+  [Desktop Entry]
+  Type=Application
+  Name=MailVoice
+  Comment=Voice assistant for your email
+  Exec=$PWD/.venv/bin/python -m mailvoice
+  Terminal=false
+  Categories=Network;Email;
+  EOF
+  ```
+- **Start with the session** — add to `~/.config/hypr/autostart.lua`:
+  ```lua
+  o.launch_on_start("/full/path/to/read_my_emails_omarchy/.venv/bin/python -m mailvoice")
+  ```
+- **Logs** for troubleshooting: `~/.local/state/mailvoice/log/mailvoice.log`.
+
 ## Install (for users)
 
 > No packaged installer yet. You need Python 3.12.
