@@ -229,9 +229,7 @@ class DeviceManager:
                     "Zbyt wiele błędnych prób. Sesja parowania została zablokowana."
                 )
             remaining = session.max_attempts - session.attempts
-            raise PairingError(
-                f"Niepoprawny kod parowania. Pozostało prób: {remaining}"
-            )
+            raise PairingError(f"Niepoprawny kod parowania. Pozostało prób: {remaining}")
 
         # Sprawdzenie limitu aktywnych urządzeń
         active_devices = self.list_devices(include_revoked=False)

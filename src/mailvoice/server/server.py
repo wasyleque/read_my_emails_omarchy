@@ -185,15 +185,17 @@ class MobileServer:
             mails = getattr(event, "items", getattr(event, "mails", []))
             for m in mails:
                 oid = get_opaque_id(self.context, m.account, m.folder, m.uidvalidity, m.uid)
-                mails_data.append({
-                    "id": oid,
-                    "sender": m.mail.sender,
-                    "subject": filter_urls(m.mail.subject),
-                    "importance": m.final_importance,
-                    "why": filter_urls(m.analysis_reason),
-                    "date": m.mail.date.isoformat() if m.mail.date else None,
-                    "suspicious": False,
-                })
+                mails_data.append(
+                    {
+                        "id": oid,
+                        "sender": m.mail.sender,
+                        "subject": filter_urls(m.mail.subject),
+                        "importance": m.final_importance,
+                        "why": filter_urls(m.analysis_reason),
+                        "date": m.mail.date.isoformat() if m.mail.date else None,
+                        "suspicious": False,
+                    }
+                )
             payload = {
                 "type": "NewImportant",
                 "timestamp": now_iso,

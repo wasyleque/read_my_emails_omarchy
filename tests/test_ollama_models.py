@@ -199,4 +199,3 @@ def test_check_model_success_and_errors():
     res_fmt = check_model(cfg, "qwen3:8b", client_factory=DummyClientFormat)
     assert res_fmt.ok is False
     assert len(res_fmt.message) > 0
-

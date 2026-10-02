@@ -407,8 +407,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "ollama_model_missing_tag": "not installed",
         "ollama_model_missing_warn": (
-            "⚠ Selected model is not installed on the Ollama server. "
-            "Mail analysis may fail."
+            "⚠ Selected model is not installed on the Ollama server. Mail analysis may fail."
         ),
         "ollama_model_missing_confirm": (
             "Selected model '{model}' is not installed on the Ollama server. "

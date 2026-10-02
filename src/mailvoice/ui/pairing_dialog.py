@@ -62,8 +62,10 @@ class PairingDialog(QDialog):
         layout.addWidget(self.lbl_instructions)
 
         # Wygenerowanie kodu QR w pamięci RAM
-        lan_ip = self.bind_host if (self.bind_host and self.bind_host != "0.0.0.0") else (
-            detect_lan_ip() or "127.0.0.1"
+        lan_ip = (
+            self.bind_host
+            if (self.bind_host and self.bind_host != "0.0.0.0")
+            else (detect_lan_ip() or "127.0.0.1")
         )
         creds = get_or_create_tls_credentials(self.data_dir)
         qr_url = (

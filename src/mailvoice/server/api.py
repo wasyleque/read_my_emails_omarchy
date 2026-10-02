@@ -172,11 +172,13 @@ async def handle_pair(request: web.Request) -> web.Response:
             device_name=device_name,
             max_devices=max_dev,
         )
-        return web.json_response({
-            "device_id": dev_id,
-            "token": token,
-            "message": "Pomyślnie sparowano urządzenie.",
-        })
+        return web.json_response(
+            {
+                "device_id": dev_id,
+                "token": token,
+                "message": "Pomyślnie sparowano urządzenie.",
+            }
+        )
     except PairingLockedError as exc:
         return web.json_response({"error": str(exc)}, status=429)
     except PairingExpiredError as exc:
@@ -199,12 +201,14 @@ async def handle_status(request: web.Request) -> web.Response:
 
     active_devices = ctx.device_manager.list_devices(include_revoked=False)
 
-    return web.json_response({
-        "version": "0.1.0",
-        "last_tick": last_tick_iso,
-        "accounts_count": len(ctx.config.accounts),
-        "active_devices_count": len(active_devices),
-    })
+    return web.json_response(
+        {
+            "version": "0.1.0",
+            "last_tick": last_tick_iso,
+            "accounts_count": len(ctx.config.accounts),
+            "active_devices_count": len(active_devices),
+        }
+    )
 
 
 def _format_mail_item(ctx: ServerContext, r: MailIndexRecord) -> dict[str, Any]:
@@ -264,19 +268,23 @@ async def handle_mail_summary(request: web.Request) -> web.Response:
         return web.json_response({"error": "Wiadomość nie znaleziona w indeksie."}, status=404)
 
     if record.risk == "high":
-        return web.json_response({
-            "id": mail_id,
-            "suspicious": True,
-            "warning": "Uwaga, ta wiadomość wygląda na podejrzaną. Treść nie została pobrana.",
-            "summary": None,
-        })
+        return web.json_response(
+            {
+                "id": mail_id,
+                "suspicious": True,
+                "warning": "Uwaga, ta wiadomość wygląda na podejrzaną. Treść nie została pobrana.",
+                "summary": None,
+            }
+        )
 
-    return web.json_response({
-        "id": mail_id,
-        "suspicious": False,
-        "warning": None,
-        "summary": filter_urls(record.summary or ""),
-    })
+    return web.json_response(
+        {
+            "id": mail_id,
+            "suspicious": False,
+            "warning": None,
+            "summary": filter_urls(record.summary or ""),
+        }
+    )
 
 
 async def handle_mail_ack(request: web.Request) -> web.Response:
@@ -302,10 +310,12 @@ async def handle_mail_ack(request: web.Request) -> web.Response:
         importance=record.importance if record else None,
     )
 
-    return web.json_response({
-        "status": "ok",
-        "message": "Wiadomość oznaczona jako wysłuchana.",
-    })
+    return web.json_response(
+        {
+            "status": "ok",
+            "message": "Wiadomość oznaczona jako wysłuchana.",
+        }
+    )
 
 
 async def handle_digest(request: web.Request) -> web.Response:
@@ -321,25 +331,30 @@ async def handle_digest(request: web.Request) -> web.Response:
         digest = ctx.service.request_digest(days=days)
     else:
         from mailvoice.core.analyzer import OllamaClient
+
         client = getattr(ctx.service, "ollama_client", None) or OllamaClient(ctx.config.ollama)
         digest = build_digest(ctx.store, client, ctx.config)
 
     topics_data = []
     for t in digest.topics:
-        topics_data.append({
-            "title": filter_urls(t.title),
-            "status": t.status,
-            "why": filter_urls(t.why),
-            "importance": t.importance,
-            "mail_count": t.mail_count,
-            "last_activity": t.last_activity.isoformat() if t.last_activity else None,
-            "who_to_whom": t.who_to_whom,
-        })
+        topics_data.append(
+            {
+                "title": filter_urls(t.title),
+                "status": t.status,
+                "why": filter_urls(t.why),
+                "importance": t.importance,
+                "mail_count": t.mail_count,
+                "last_activity": t.last_activity.isoformat() if t.last_activity else None,
+                "who_to_whom": t.who_to_whom,
+            }
+        )
 
-    return web.json_response({
-        "period": digest.period,
-        "topics": topics_data,
-    })
+    return web.json_response(
+        {
+            "period": digest.period,
+            "topics": topics_data,
+        }
+    )
 
 
 async def handle_voice_command(request: web.Request) -> web.Response:
@@ -390,10 +405,12 @@ async def handle_voice_command(request: web.Request) -> web.Response:
     resp_map = responses_pl if lang == "pl" else responses_en
     action, reply_text = resp_map.get(cmd, ("unknown", "Nie rozumiem polecenia."))
 
-    return web.json_response({
-        "action": action,
-        "reply_text": reply_text,
-    })
+    return web.json_response(
+        {
+            "action": action,
+            "reply_text": reply_text,
+        }
+    )
 
 
 async def handle_disconnect_self(request: web.Request) -> web.Response:
@@ -402,10 +419,12 @@ async def handle_disconnect_self(request: web.Request) -> web.Response:
     device: PairedDevice = request[DEVICE_KEY]
 
     ctx.device_manager.revoke_device(device.id)
-    return web.json_response({
-        "status": "ok",
-        "message": "Urządzenie zostało pomyślnie odłączone.",
-    })
+    return web.json_response(
+        {
+            "status": "ok",
+            "message": "Urządzenie zostało pomyślnie odłączone.",
+        }
+    )
 
 
 async def handle_events_websocket(request: web.Request) -> web.WebSocketResponse:

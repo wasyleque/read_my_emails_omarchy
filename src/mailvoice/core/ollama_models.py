@@ -222,4 +222,3 @@ def check_model(
         elapsed = time.perf_counter() - start_time
         friendly = format_friendly_error(exc, lang=lang)
         return CheckResult(ok=False, message=friendly, elapsed_s=elapsed)
-

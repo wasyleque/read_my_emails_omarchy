@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from mailvoice import crashlog
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import load_config, save_config
+from mailvoice.core.instance import acquire_instance_lock
 from mailvoice.core.secrets import KeyringStore, SecretStore, SecretStoreUnavailable
 from mailvoice.core.service import MailService
 from mailvoice.core.store import Store
@@ -48,6 +49,10 @@ def get_secret_store() -> SecretStore:
 def main() -> int:
     """Główna funkcja uruchamiająca aplikację MailVoice (z zapisem błędów do logu)."""
     crashlog.install()
+    lock = acquire_instance_lock()
+    if lock is None:
+        _report_already_running("--headless" in sys.argv)
+        return 1
     if "--headless" in sys.argv:
         from mailvoice.headless import run_headless
 
@@ -58,6 +63,24 @@ def main() -> int:
     except Exception:  # noqa: BLE001 — błąd startu ma trafić do logu i do okna
         crashlog.report(*sys.exc_info())
         return 1
+
+
+def _report_already_running(headless: bool) -> None:
+    message = (
+        "MailVoice już działa. Poszukaj jego okna lub ikony w zasobniku systemowym "
+        "(drugie uruchomienie dublowałoby powiadomienia)."
+    )
+    print(message, file=sys.stderr)
+    if headless:
+        return
+    try:
+        app = QApplication.instance() or QApplication(sys.argv)
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.information(None, "MailVoice", message)
+        del app
+    except Exception:  # noqa: BLE001 — komunikat nie może sam zawieść
+        pass
 
 
 def _run() -> int:

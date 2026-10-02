@@ -75,10 +75,12 @@ def generate_self_signed_cert(
     not_before = now - timedelta(hours=1)
     not_after = now + timedelta(days=days_valid)
 
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, "MailVoice Mobile Server"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "MailVoice"),
-    ])
+    subject = issuer = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COMMON_NAME, "MailVoice Mobile Server"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "MailVoice"),
+        ]
+    )
 
     san_entries: list[x509.GeneralName] = [
         x509.DNSName("localhost"),

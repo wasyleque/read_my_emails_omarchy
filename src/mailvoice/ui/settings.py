@@ -1139,9 +1139,7 @@ class SettingsDialog(QDialog):
 
     def _repopulate_model_combos(self) -> None:
         current_general = (
-            self.cb_model.currentData()
-            or self.cb_model.currentText()
-            or self.config.ollama.model
+            self.cb_model.currentData() or self.cb_model.currentText() or self.config.ollama.model
         )
         current_polish = self.cb_polish_model.currentData()
         if current_polish is None and self.cb_polish_model.currentIndex() > 0:
@@ -1207,9 +1205,7 @@ class SettingsDialog(QDialog):
 
             if current_polish and current_polish != current_general:
                 status_pl = (
-                    describe_selection(current_polish, installed)
-                    if self.ollama_detection
-                    else "ok"
+                    describe_selection(current_polish, installed) if self.ollama_detection else "ok"
                 )
                 has_item_pl = any(
                     self.cb_polish_model.itemData(i) == current_polish
@@ -1384,9 +1380,7 @@ class SettingsDialog(QDialog):
 
         # Walidacja i konfiguracja Ollama
         selected_model = (
-            self.cb_model.currentData()
-            or self.cb_model.currentText()
-            or self.config.ollama.model
+            self.cb_model.currentData() or self.cb_model.currentText() or self.config.ollama.model
         )
         selected_polish_data = self.cb_polish_model.currentData()
         if not selected_polish_data:
