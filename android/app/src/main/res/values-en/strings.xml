@@ -1,0 +1,62 @@
+<resources>
+    <string name="app_name">MailVoice</string>
+
+    <!-- Screen titles -->
+    <string name="title_pair">Pair with computer</string>
+    <string name="title_connected">Connected to computer</string>
+    <string name="title_scanner">Scan QR code</string>
+    <string name="title_manual_entry">Enter details manually</string>
+
+    <!-- 1-2-3 guide -->
+    <string name="guide_title">How to connect phone to MailVoice:</string>
+    <string name="guide_step_1">1. Open MailVoice on your computer.</string>
+    <string name="guide_step_2">2. In the app menu, go to: Settings → Phone.</string>
+    <string name="guide_step_3">3. Click \"Pair new phone\" and point your camera at the displayed QR code.</string>
+
+    <!-- Buttons -->
+    <string name="btn_scan_qr">Scan QR code</string>
+    <string name="btn_manual_entry">Enter code manually</string>
+    <string name="btn_check_connection">Check connection</string>
+    <string name="btn_disconnect">Disconnect phone</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_connect">Connect to computer</string>
+    <string name="btn_retry">Try again</string>
+    <string name="btn_grant_camera">Allow camera</string>
+    <string name="btn_ok">Understood</string>
+    <string name="btn_back">Back</string>
+
+    <!-- Camera permission -->
+    <string name="camera_rationale_title">Camera is required for scanning</string>
+    <string name="camera_rationale_desc">Camera is only used to scan the QR code from your computer screen once. The app does not save photos or videos.</string>
+    <string name="camera_permission_denied">Camera permission was not granted. You can enter pairing details manually below.</string>
+
+    <!-- QR scanner -->
+    <string name="scanner_hint">Point camera at the QR code on your computer screen</string>
+    <string name="scanner_manual_fallback">Having trouble scanning? Enter details manually</string>
+
+    <!-- Manual entry -->
+    <string name="manual_desc">Paste pairing link or fill in the fields from your computer screen:</string>
+    <string name="label_paste_link">QR code link (mailvoice://pair?...)</string>
+    <string name="label_host">Computer IP address (e.g. 192.168.1.50)</string>
+    <string name="label_port">Server port (default 8765)</string>
+    <string name="label_code">Pairing code (6 characters, e.g. K7P9X2)</string>
+    <string name="label_fingerprint">SHA-256 Certificate Fingerprint (64 hex characters)</string>
+    <string name="error_fill_fields">Please provide a QR link or fill in all required fields (IP, code, and fingerprint).</string>
+
+    <!-- Connected screen -->
+    <string name="status_connected_desc">Phone is connected and synchronized with MailVoice on your computer.</string>
+    <string name="server_address_format">Computer address: %1$s:%2$d</string>
+    <string name="server_version_format">Server version: %1$s</string>
+    <string name="accounts_count_format">Email accounts: %1$d</string>
+    <string name="devices_count_format">Paired phones: %1$d</string>
+    <string name="status_connecting">Connecting to computer...</string>
+    <string name="status_refreshing">Checking connection status...</string>
+
+    <!-- Disconnect dialog -->
+    <string name="disconnect_dialog_title">Disconnect phone?</string>
+    <string name="disconnect_dialog_desc">Are you sure you want to disconnect this phone from MailVoice on your computer? To reconnect, you will need to scan a new QR code.</string>
+
+    <!-- Errors and alerts -->
+    <string name="alert_security_title">Security Warning</string>
+    <string name="alert_error_title">Connection Error</string>
+</resources>

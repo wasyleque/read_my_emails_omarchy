@@ -1,3 +1,62 @@
 <resources>
     <string name="app_name">MailVoice</string>
+
+    <!-- Nagłówki ekranów -->
+    <string name="title_pair">Sparuj z komputerem</string>
+    <string name="title_connected">Połączono z komputerem</string>
+    <string name="title_scanner">Zeskanuj kod QR</string>
+    <string name="title_manual_entry">Wpisz dane ręcznie</string>
+
+    <!-- Instrukcja 1-2-3 -->
+    <string name="guide_title">Jak połączyć telefon z programem:</string>
+    <string name="guide_step_1">1. Otwórz program MailVoice na komputerze.</string>
+    <string name="guide_step_2">2. W oknie programu przejdź do: Ustawienia → Telefon.</string>
+    <string name="guide_step_3">3. Kliknij „Sparuj nowy telefon” i skieruj aparat na wyświetlony kod QR.</string>
+
+    <!-- Przyciski -->
+    <string name="btn_scan_qr">Zeskanuj kod QR</string>
+    <string name="btn_manual_entry">Wpisz kod ręcznie</string>
+    <string name="btn_check_connection">Sprawdź połączenie</string>
+    <string name="btn_disconnect">Odłącz telefon</string>
+    <string name="btn_cancel">Anuluj</string>
+    <string name="btn_connect">Połącz z komputerem</string>
+    <string name="btn_retry">Spróbuj ponownie</string>
+    <string name="btn_grant_camera">Zezwól na aparat</string>
+    <string name="btn_ok">Rozumiem</string>
+    <string name="btn_back">Wstecz</string>
+
+    <!-- Uprawnienie aparatu -->
+    <string name="camera_rationale_title">Aparat jest potrzebny do skanowania</string>
+    <string name="camera_rationale_desc">Aparat jest używany wyłącznie do jednorazowego zeskanowania kodu QR z ekranu komputera. Aplikacja nie zapisuje zdjęć ani filmów.</string>
+    <string name="camera_permission_denied">Brak uprawnienia do aparatu. Możesz wpisać dane parowania ręcznie poniżej.</string>
+
+    <!-- Skaner QR -->
+    <string name="scanner_hint">Skieruj aparat na kod QR na ekranie komputera</string>
+    <string name="scanner_manual_fallback">Problemy ze skanowaniem? Wpisz dane ręcznie</string>
+
+    <!-- Ręczne wprowadzanie -->
+    <string name="manual_desc">Wklej link parowania lub uzupełnij poniższe pola z ekranu komputera:</string>
+    <string name="label_paste_link">Link z kodu QR (mailvoice://pair?...)</string>
+    <string name="label_host">Adres IP komputera (np. 192.168.1.50)</string>
+    <string name="label_port">Port serwera (domyślnie 8765)</string>
+    <string name="label_code">Kod parowania (6 znaków, np. K7P9X2)</string>
+    <string name="label_fingerprint">Odcisk certyfikatu SHA-256 (64 znaki hex)</string>
+    <string name="error_fill_fields">Wypełnij link QR lub wszystkie wymagane pola (adres IP, kod i odcisk).</string>
+
+    <!-- Ekran połączono -->
+    <string name="status_connected_desc">Telefon jest połączony i zsynchronizowany z programem MailVoice na Twoim komputerze.</string>
+    <string name="server_address_format">Adres komputera: %1$s:%2$d</string>
+    <string name="server_version_format">Wersja serwera: %1$s</string>
+    <string name="accounts_count_format">Skrzynki pocztowe: %1$d</string>
+    <string name="devices_count_format">Sparowane telefony: %1$d</string>
+    <string name="status_connecting">Łączenie z komputerem...</string>
+    <string name="status_refreshing">Sprawdzanie stanu połączenia...</string>
+
+    <!-- Dialog odłączenia -->
+    <string name="disconnect_dialog_title">Odłączyć telefon?</string>
+    <string name="disconnect_dialog_desc">Czy na pewno chcesz odłączyć ten telefon od programu MailVoice na komputerze? Aby połączyć ponownie, wymagane będzie ponowne zeskanowanie kodu QR.</string>
+
+    <!-- Błędy i ostrzeżenia -->
+    <string name="alert_security_title">Ostrzeżenie bezpieczeństwa</string>
+    <string name="alert_error_title">Błąd połączenia</string>
 </resources>
