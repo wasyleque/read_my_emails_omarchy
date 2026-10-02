@@ -68,8 +68,11 @@ class ImapTestWorker(QThread):
                 password=self.password,
                 use_ssl=self.use_ssl,
             )
-            client.login()
-            client.logout()
+            try:
+                # Logowanie dzieje się przy pierwszym zapytaniu; sprawdzamy też dostęp do INBOX.
+                client.get_uidvalidity("INBOX")
+            finally:
+                client.close()
             self.finished_ok.emit()
         except Exception as exc:
             msg = format_friendly_error(exc, lang=self.lang)
