@@ -6,6 +6,7 @@ from pathlib import Path
 import platformdirs
 from PySide6.QtWidgets import QApplication
 
+from mailvoice import crashlog
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import load_config, save_config
 from mailvoice.core.secrets import KeyringStore, SecretStore, SecretStoreUnavailable
@@ -45,8 +46,17 @@ def get_secret_store() -> SecretStore:
 
 
 def main() -> int:
-    """Główna funkcja uruchamiająca aplikację MailVoice."""
-    app = QApplication(sys.argv)
+    """Główna funkcja uruchamiająca aplikację MailVoice (z zapisem błędów do logu)."""
+    crashlog.install()
+    try:
+        return _run()
+    except Exception:  # noqa: BLE001 — błąd startu ma trafić do logu i do okna
+        crashlog.report(*sys.exc_info())
+        return 1
+
+
+def _run() -> int:
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("MailVoice")
 
     config_dir = Path(platformdirs.user_config_dir("mailvoice"))
