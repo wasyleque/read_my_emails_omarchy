@@ -121,9 +121,7 @@ def search(
     since_iso = since_dt.isoformat()
 
     # 2. Krok (a): Rozszerzenie zapytania przez LLM
-    senders, keywords = (
-        _expand_query(actual_llm, query, model) if actual_llm else ([], [query])
-    )
+    senders, keywords = _expand_query(actual_llm, query, model) if actual_llm else ([], [query])
 
     # 3. Krok (b): Pobranie kandydatów z SQLite FTS5 / LIKE
     candidates = store.search_candidates(
@@ -156,9 +154,8 @@ def search(
         "- why_probable: jedno krótkie zdanie uzasadnienia po polsku (dlaczego to ten mail)\n"
         "Zwróć format JSON zgodny ze schematem."
     )
-    user_content = (
-        f"Zapytanie użytkownika: {query}\n\n"
-        f"Kandydaci wiadomości:\n" + "\n".join(candidate_lines)
+    user_content = f"Zapytanie użytkownika: {query}\n\nKandydaci wiadomości:\n" + "\n".join(
+        candidate_lines
     )
 
     messages = [

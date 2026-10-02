@@ -12,6 +12,7 @@ from mailvoice.core.imap_fetch import (
     commit_progress,
     fetch_backlog,
     fetch_new,
+    fetch_sent_for_index,
     fetch_sent_message_ids,
     normalize_message_id,
 )
@@ -52,21 +53,37 @@ class FakeMailboxClient:
         self.closed = False
 
     def get_uidvalidity(self, folder: str) -> int:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
         return self.uidvalidity
 
     def get_uids_greater_than(self, folder: str, min_uid: int) -> list[int]:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
         folder_emails = self.folders.get(folder, {})
         return sorted([uid for uid in folder_emails if uid > min_uid])
 
+    def get_uids_since(self, folder: str, since_date: date) -> list[int]:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
+        folder_emails = self.folders.get(folder, {})
+        return sorted(list(folder_emails.keys()))
+
     def get_unseen_uids(self, folder: str, since_date: date) -> list[int]:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
         unseen = self.unseen_uids.get(folder, set())
         return sorted(list(unseen))
 
     def fetch_raw_batch(self, folder: str, uids: Sequence[int]) -> list[tuple[int, bytes]]:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
         folder_emails = self.folders.get(folder, {})
         return [(uid, folder_emails[uid]) for uid in uids if uid in folder_emails]
 
     def get_sent_message_ids(self, folder: str, since_date: date) -> list[str]:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
         return list(self.sent_headers)
 
     def close(self) -> None:
@@ -172,3 +189,92 @@ def test_imap_tools_client_sanitizes_password():
 
     error_msg = str(exc_info.value)
     assert "SuperSecretPassword123" not in error_msg
+
+
+def test_fetch_sent_for_index_basic(store):
+    client = FakeMailboxClient(uidvalidity=999)
+    client.folders["Sent"][1] = _make_raw_email(message_id="<sent1@example.com>", subject="Sent 1")
+    client.folders["Sent"][2] = _make_raw_email(message_id="<sent2@example.com>", subject="Sent 2")
+
+    items = fetch_sent_for_index(client, store, "acc1", sent_folder="Sent", days=30)
+    assert len(items) == 2
+    assert items.folder == "Sent"
+    assert items.uidvalidity == 999
+    assert items[0][0] == 1
+    assert items[0][1].message_id == "<sent1@example.com>"
+    assert items[1][0] == 2
+    assert items[1][1].message_id == "<sent2@example.com>"
+
+
+def test_fetch_sent_for_index_skips_already_indexed(store):
+    from mailvoice.core.store import MailIndexRecord
+
+    client = FakeMailboxClient(uidvalidity=999)
+    client.folders["Sent"][1] = _make_raw_email(message_id="<sent1@example.com>", subject="Sent 1")
+    client.folders["Sent"][2] = _make_raw_email(message_id="<sent2@example.com>", subject="Sent 2")
+
+    # Wiadomość 1 już w indeksie tego konta
+    store.save_mail_index(
+        MailIndexRecord(
+            account="acc1",
+            folder="Sent",
+            uidvalidity=999,
+            uid=1,
+            message_id="<sent1@example.com>",
+            thread_key="<sent1@example.com>",
+            date="2026-10-01T12:00:00+00:00",
+            sender="me@example.com",
+            recipients="to@example.com",
+            subject="Sent 1",
+            importance=0,
+            why="",
+            summary="",
+            direction="out",
+        )
+    )
+
+    items = fetch_sent_for_index(client, store, "acc1", sent_folder="Sent", days=30)
+    assert len(items) == 1
+    assert items[0][0] == 2
+    assert items[0][1].message_id == "<sent2@example.com>"
+
+
+def test_fetch_sent_for_index_folder_fallback(store):
+    client = FakeMailboxClient(uidvalidity=777)
+    # Usuwamy domyślny 'Sent', tworzymy '[Gmail]/Sent Mail'
+    del client.folders["Sent"]
+    client.folders["[Gmail]/Sent Mail"] = {
+        5: _make_raw_email(message_id="<gmail_sent@example.com>", subject="Gmail sent")
+    }
+
+    # Przekazujemy folder 'NonExistent', a funkcja powinna znaleźć '[Gmail]/Sent Mail'
+    items = fetch_sent_for_index(client, store, "acc1", sent_folder="NonExistent", days=30)
+    assert len(items) == 1
+    assert items.folder == "[Gmail]/Sent Mail"
+    assert items.uidvalidity == 777
+    assert items[0][0] == 5
+    assert items[0][1].message_id == "<gmail_sent@example.com>"
+
+
+def test_fetch_sent_for_index_missing_folder_raises(store):
+    client = FakeMailboxClient(uidvalidity=100)
+    client.folders.clear()
+    client.folders["INBOX"] = {}
+
+    with pytest.raises(FetchError) as exc_info:
+        fetch_sent_for_index(client, store, "acc1", sent_folder="MissingFolder", days=30)
+    assert "Nie odnaleziono folderu wiadomości wysłanych" in str(exc_info.value)
+
+
+def test_fetch_sent_for_index_limit(store):
+    client = FakeMailboxClient(uidvalidity=1000)
+    for i in range(1, 15):
+        client.folders["Sent"][i] = _make_raw_email(
+            message_id=f"<msg_{i}@example.com>", subject=f"Subject {i}"
+        )
+
+    items = fetch_sent_for_index(client, store, "acc1", sent_folder="Sent", limit=5)
+    assert len(items) == 5
+    # Powinny być najnowsze UID (10, 11, 12, 13, 14)
+    uids = [item[0] for item in items]
+    assert uids == [10, 11, 12, 13, 14]

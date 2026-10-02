@@ -141,6 +141,7 @@ def resolve_contact(store: Store, address_or_name: str) -> Contact | None:
             if clean_addr and r_addr == clean_addr:
                 if r_name:
                     display_names.append(r_name)
+                found_addresses.add(r_addr)
             elif query.lower() in r_name.lower():
                 if r_name:
                     display_names.append(r_name)
@@ -288,30 +289,48 @@ def build_contact_card(
     last_contact = _parse_iso_date(contact_records[-1].date)
     mail_count = len(contact_records)
 
-    # Ostatnie 4 wymiany
+    # Ostatnie 4 wymiany z oznaczeniem kierunku („Ty → Anna”, „Anna → Ty”)
     last_exchange: list[tuple[str, str, str]] = []
     for r in contact_records[-4:]:
         dt_str = r.date[:10] if r.date else ""
-        is_incoming = _clean_email(r.sender) in contact_addrs
-        kierunek = f"Od: {contact.display_name}" if is_incoming else f"Do: {contact.display_name}"
+        direction = getattr(r, "direction", "in")
+        if direction == "out":
+            kierunek = f"Ty → {contact.display_name}"
+        else:
+            kierunek = f"{contact.display_name} → Ty"
         summary = r.summary or r.why or clean_subject(r.subject)
         last_exchange.append((dt_str, kierunek, summary))
 
-    # Tematy powiązane z kontaktem
+    # Tematy powiązane z kontaktem i otwarte sprawy (wg ostatniej wiadomości w wątku)
     thread_keys = list(dict.fromkeys(r.thread_key for r in contact_records))
     topics: list[Topic] = []
     open_items: list[str] = []
 
     for t_key in thread_keys:
+        thread_recs = store.get_records_for_thread(t_key)
         cached_t = store.get_topic_digest_cache(t_key)
-        if cached_t:
-            status_val = cached_t.status
-            title_val = cached_t.title
-            if status_val == "oczekuje_na_mnie":
-                open_items.append(f"Czeka na Twoją odpowiedź: {title_val}")
-            elif status_val == "oczekuje_na_innych":
-                open_items.append(f"Czeka na odpowiedź {contact.display_name}: {title_val}")
 
+        title_val = cached_t.title if cached_t else ""
+        if not title_val and thread_recs:
+            title_val = clean_subject(thread_recs[-1].subject) or "Wątek"
+
+        last_rec = thread_recs[-1] if thread_recs else None
+        last_dir = getattr(last_rec, "direction", "in") if last_rec else "in"
+        raw_status = cached_t.status if cached_t else ""
+
+        if raw_status in ("zamknięte", "informacyjne"):
+            status_val = raw_status
+        elif last_dir == "out":
+            status_val = "oczekuje_na_innych"
+        else:
+            status_val = "oczekuje_na_mnie"
+
+        if status_val == "oczekuje_na_mnie":
+            open_items.append(f"Czeka na Ciebie: {title_val}")
+        elif status_val == "oczekuje_na_innych":
+            open_items.append(f"Czeka na kontakt ({contact.display_name}): {title_val}")
+
+        if cached_t:
             topics.append(
                 Topic(
                     title=title_val,
@@ -340,11 +359,7 @@ def build_contact_card(
         )
         cached_row = cur.fetchone()
 
-    if (
-        cached_row
-        and cached_row[2] == last_mail_date
-        and cached_row[3] == mail_count
-    ):
+    if cached_row and cached_row[2] == last_mail_date and cached_row[3] == mail_count:
         rel_hint = cached_row[0]
         why_matters = cached_row[1]
     else:
@@ -352,10 +367,17 @@ def build_contact_card(
         cfg = config or AppConfig()
         model = pick_model("pl", cfg.ollama)
 
-        history_lines = [
-            f"- [{r.date[:10] if r.date else ''}] {r.subject}: {r.summary or r.why or ''}"
-            for r in contact_records[-6:]
-        ]
+        history_lines: list[str] = []
+        for r in contact_records[-6:]:
+            dt = r.date[:10] if r.date else ""
+            r_dir = getattr(r, "direction", "in")
+            k_lbl = (
+                f"Ty → {contact.display_name}"
+                if r_dir == "out"
+                else f"{contact.display_name} → Ty"
+            )
+            text_desc = r.summary or r.why or ""
+            history_lines.append(f"- [{dt}] {k_lbl}: {r.subject} ({text_desc})")
         user_content = (
             f"Osoba: {contact.display_name}\n"
             f"Adresy: {', '.join(contact.addresses)}\n"
@@ -377,8 +399,7 @@ def build_contact_card(
         ]
 
         rel_hint = (
-            f"{contact.display_name} — kontakt z korespondencji e-mail "
-            f"({mail_count} wiadomości)."
+            f"{contact.display_name} — kontakt z korespondencji e-mail ({mail_count} wiadomości)."
         )
         why_matters = open_items[0] if open_items else "Brak otwartych spraw."
 

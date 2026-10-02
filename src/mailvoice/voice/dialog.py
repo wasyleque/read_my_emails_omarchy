@@ -125,7 +125,16 @@ def classify_command(text: str | None) -> VoiceCommand:
 
     # Potwierdzenie (Tak)
     yes_words = {
-        "tak", "yes", "chce", "slucham", "jasne", "pewnie", "dawaj", "sure", "ok", "dobrze"
+        "tak",
+        "yes",
+        "chce",
+        "slucham",
+        "jasne",
+        "pewnie",
+        "dawaj",
+        "sure",
+        "ok",
+        "dobrze",
     }
     if words & yes_words:
         return VoiceCommand.YES
@@ -327,8 +336,7 @@ class VoiceDialog:
             )
         else:
             prompt = (
-                f"You have {count} older unread important emails. "
-                "Would you like to hear summaries?"
+                f"You have {count} older unread important emails. Would you like to hear summaries?"
             )
         self._speak_safely(prompt, lang)
         answer = self._listen_with_retry(lang)
@@ -349,9 +357,7 @@ class VoiceDialog:
                 self._read_mail_summaries(processed_items, lang)
             else:
                 self._speak_safely(
-                    "Zaległości zostały zatwierdzone."
-                    if lang == "pl"
-                    else "Backlog confirmed.",
+                    "Zaległości zostały zatwierdzone." if lang == "pl" else "Backlog confirmed.",
                     lang,
                 )
         else:
@@ -420,9 +426,7 @@ class VoiceDialog:
                 idx += 1
 
         self._speak_safely(
-            "To wszystkie ważne wiadomości."
-            if lang == "pl"
-            else "That is all important messages.",
+            "To wszystkie ważne wiadomości." if lang == "pl" else "That is all important messages.",
             lang,
         )
 
@@ -499,9 +503,7 @@ class VoiceDialog:
                     continue
 
                 if cmd in (VoiceCommand.STOP, VoiceCommand.NO):
-                    self._speak_safely(
-                        "Zatrzymano." if lang == "pl" else "Stopped.", lang
-                    )
+                    self._speak_safely("Zatrzymano." if lang == "pl" else "Stopped.", lang)
                     return
 
                 if cmd == VoiceCommand.LOUDER:
@@ -529,9 +531,7 @@ class VoiceDialog:
             lang,
         )
 
-    def _read_contact_card(
-        self, card: ContactCard | None, query: str, lang: str
-    ) -> None:
+    def _read_contact_card(self, card: ContactCard | None, query: str, lang: str) -> None:
         """Odczytuje podsumowanie karty kontaktu lub oferuje wyszukiwanie AI, gdy nieznany."""
         if card is None:
             prompt = (
@@ -553,11 +553,7 @@ class VoiceDialog:
 
         hint = f" {card.relationship_hint}." if card.relationship_hint else ""
         why = f" {card.why_it_matters}." if card.why_it_matters else ""
-        open_it = (
-            f" Otwarte sprawy: {'; '.join(card.open_items)}."
-            if card.open_items
-            else ""
-        )
+        open_it = f" Otwarte sprawy: {'; '.join(card.open_items)}." if card.open_items else ""
         last_ex = ""
         if card.last_exchange:
             _, direction, s_text = card.last_exchange[0]
@@ -570,14 +566,11 @@ class VoiceDialog:
 
         self._speak_safely(" ".join(text.split()), lang)
 
-    def _read_search_hits(
-        self, hits: list[SearchHit], query: str, lang: str
-    ) -> None:
+    def _read_search_hits(self, hits: list[SearchHit], query: str, lang: str) -> None:
         """Odczytuje wyniki wyszukiwania wiadomości AI."""
         if not hits:
             self._speak_safely(
-                "Nie znalazłem pasujących wiadomości. "
-                "Zaproponuj dłuższy okres lub zmień zapytanie."
+                "Nie znalazłem pasujących wiadomości. Zaproponuj dłuższy okres lub zmień zapytanie."
                 if lang == "pl"
                 else (
                     "No matching messages found. "
@@ -616,9 +609,7 @@ class VoiceDialog:
             self._speak_safely(" ".join(text.split()), lang)
 
             if idx + 1 < total:
-                continue_prompt = (
-                    "Czytać kolejny wynik?" if lang == "pl" else "Read next result?"
-                )
+                continue_prompt = "Czytać kolejny wynik?" if lang == "pl" else "Read next result?"
                 self._speak_safely(continue_prompt, lang)
                 cmd_text = self.listener.listen(timeout_s=5.0)
                 cmd = classify_command(cmd_text)
@@ -626,9 +617,7 @@ class VoiceDialog:
                 if cmd == VoiceCommand.REPEAT:
                     continue
                 if cmd in (VoiceCommand.STOP, VoiceCommand.NO):
-                    self._speak_safely(
-                        "Zatrzymano." if lang == "pl" else "Stopped.", lang
-                    )
+                    self._speak_safely("Zatrzymano." if lang == "pl" else "Stopped.", lang)
                     return
                 if cmd == VoiceCommand.LOUDER:
                     current_vol = getattr(self.speaker, "volume", 1.0)
@@ -653,4 +642,3 @@ class VoiceDialog:
             else "That is all found messages.",
             lang,
         )
-

@@ -31,6 +31,7 @@ class MailIndexRecord:
     importance: int | None
     why: str | None
     summary: str | None
+    direction: str = "in"
 
 
 @dataclass(frozen=True)
@@ -110,18 +111,13 @@ class Store:
                 importance INTEGER,
                 why TEXT,
                 summary TEXT,
+                direction TEXT NOT NULL DEFAULT 'in',
                 PRIMARY KEY(account, folder, uidvalidity, uid)
             )
         """)
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_mail_index_thread ON mail_index(thread_key)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_mail_index_date ON mail_index(date)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_mail_index_sender ON mail_index(sender)"
-        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mail_index_thread ON mail_index(thread_key)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mail_index_date ON mail_index(date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mail_index_sender ON mail_index(sender)")
 
         # Create topic_digest_cache table
         cursor.execute("""
@@ -202,6 +198,12 @@ class Store:
         seen_cols = [row[1] for row in cursor.fetchall()]
         if "attempts" not in seen_cols:
             cursor.execute("ALTER TABLE seen ADD COLUMN attempts INTEGER DEFAULT 0")
+
+        # Migracja tabeli mail_index jeśli kolumna direction nie istnieje
+        cursor.execute("PRAGMA table_info(mail_index)")
+        mail_index_cols = [row[1] for row in cursor.fetchall()]
+        if mail_index_cols and "direction" not in mail_index_cols:
+            cursor.execute("ALTER TABLE mail_index ADD COLUMN direction TEXT NOT NULL DEFAULT 'in'")
 
         self.connection.commit()
 
@@ -360,8 +362,8 @@ class Store:
             """
             INSERT OR REPLACE INTO mail_index
                 (account, folder, uidvalidity, uid, message_id, thread_key,
-                 date, sender, recipients, subject, importance, why, summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 date, sender, recipients, subject, importance, why, summary, direction)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.account,
@@ -377,6 +379,7 @@ class Store:
                 record.importance,
                 record.why,
                 record.summary,
+                record.direction,
             ),
         )
 
@@ -407,6 +410,37 @@ class Store:
 
         self.connection.commit()
 
+    def is_indexed(
+        self,
+        account: str,
+        folder: str,
+        uidvalidity: int,
+        uid: int,
+        message_id: str | None = None,
+    ) -> bool:
+        """Sprawdza czy wiadomość została już zapisana w indeksie mail_index."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT 1 FROM mail_index
+            WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
+            """,
+            (account, folder, uidvalidity, uid),
+        )
+        if cursor.fetchone():
+            return True
+        if message_id:
+            cursor.execute(
+                """
+                SELECT 1 FROM mail_index
+                WHERE account = ? AND message_id = ?
+                """,
+                (account, message_id),
+            )
+            if cursor.fetchone():
+                return True
+        return False
+
     def get_mail_index(
         self, account: str, folder: str, uidvalidity: int, uid: int
     ) -> MailIndexRecord | None:
@@ -415,7 +449,7 @@ class Store:
         cursor.execute(
             """
             SELECT account, folder, uidvalidity, uid, message_id, thread_key,
-                   date, sender, recipients, subject, importance, why, summary
+                   date, sender, recipients, subject, importance, why, summary, direction
             FROM mail_index
             WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
             """,
@@ -432,7 +466,7 @@ class Store:
         cursor.execute(
             """
             SELECT account, folder, uidvalidity, uid, message_id, thread_key,
-                   date, sender, recipients, subject, importance, why, summary
+                   date, sender, recipients, subject, importance, why, summary, direction
             FROM mail_index
             WHERE thread_key = ?
             ORDER BY date ASC, uid ASC
@@ -447,7 +481,7 @@ class Store:
         """Zwraca wpisy z indeksu z opcjonalnym filtrem zakresu dat ISO 8601."""
         query = (
             "SELECT account, folder, uidvalidity, uid, message_id, thread_key, "
-            "date, sender, recipients, subject, importance, why, summary "
+            "date, sender, recipients, subject, importance, why, summary, direction "
             "FROM mail_index"
         )
         params: list[str] = []
@@ -543,6 +577,12 @@ class Store:
         )
         self.connection.commit()
 
+    def invalidate_topic_digest_cache(self, thread_key: str) -> None:
+        """Usuwa wpis pamięci podręcznej podsumowania wątku."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM topic_digest_cache WHERE thread_key = ?", (thread_key,))
+        self.connection.commit()
+
     def search_candidates(
         self,
         keywords: list[str],
@@ -570,8 +610,7 @@ class Store:
             if tokens:
                 fts_query = " OR ".join(tokens)
                 sql = (
-                    "SELECT account, folder, uidvalidity, uid "
-                    "FROM mail_fts WHERE mail_fts MATCH ? "
+                    "SELECT account, folder, uidvalidity, uid FROM mail_fts WHERE mail_fts MATCH ? "
                 )
                 params: list[str] = [fts_query]
                 if since:
@@ -609,7 +648,7 @@ class Store:
 
         sql = (
             "SELECT account, folder, uidvalidity, uid, message_id, thread_key, "
-            "date, sender, recipients, subject, importance, why, summary "
+            "date, sender, recipients, subject, importance, why, summary, direction "
             "FROM mail_index WHERE (" + " OR ".join(conditions) + ")"
         )
         if since:

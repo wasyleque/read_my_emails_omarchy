@@ -24,9 +24,12 @@ def _make_email_bytes(
     body: str,
     message_id: str,
     in_reply_to: str | None = None,
+    to: str | None = None,
 ) -> bytes:
     msg = EmailMessage()
     msg["From"] = sender
+    if to:
+        msg["To"] = to
     msg["Subject"] = subject
     msg["Message-ID"] = message_id
     msg["Date"] = "Wed, 01 Oct 2026 12:00:00 +0000"
@@ -381,3 +384,159 @@ def test_store_migration_preserves_data(tmp_path):
     assert s.increment_attempts("acc", "INBOX", 1, 10) == 1
     assert s.get_attempts("acc", "INBOX", 1, 10) == 1
     s.close()
+
+
+def test_sent_mail_indexing_in_pipeline(store):
+    config = AppConfig(
+        accounts=[
+            AccountConfig(
+                name="test_acc",
+                host="imap.test.local",
+                folders=["INBOX"],
+                sent_folder="Sent",
+            )
+        ],
+        importance_threshold=6,
+        ollama=OllamaConfig(lan_url="http://lan:11434"),
+    )
+
+    client = FakeMailboxClient(uidvalidity=10)
+    store.set_last_uid("test_acc", "INBOX", 10, 0)
+    # Mail w folderze wysłanych
+    client.folders["Sent"][5] = _make_email_bytes(
+        sender="me@mycompany.pl",
+        to="client@customer.com",
+        subject="Re: Oferta współpracy",
+        body="Przesyłam szczegóły oferty.",
+        message_id="<sent_msg_5@mycompany.pl>",
+        in_reply_to="<inbox_msg_1@customer.com>",
+    )
+
+    classify_calls: list[str] = []
+
+    def mock_classify(messages, model):
+        classify_calls.append(str(messages))
+        return None
+
+    ollama = OllamaClient("http://lan:11434", "http://127.0.0.1:11434")
+    ollama.classify = mock_classify
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda _: client,
+        ollama_client=ollama,
+    )
+
+    result = run_cycle(deps)
+
+    # Wysłane maile nie wywołują Ollama classify ani nie trafiają do ważnych
+    assert len(classify_calls) == 0
+    assert len(result.important) == 0
+
+    # Wiadomość wysłana została zaindeksowana z direction='out'
+    rec = store.get_mail_index("test_acc", "Sent", 10, 5)
+    assert rec is not None
+    assert rec.direction == "out"
+    assert rec.importance == 0
+    assert rec.why == ""
+    assert rec.summary == ""
+    assert rec.sender == "me@mycompany.pl"
+    assert "client@customer.com" in rec.recipients
+    assert rec.thread_key == "<inbox_msg_1@customer.com>"
+
+
+def test_sent_folder_missing_does_not_crash_cycle(store):
+    config = AppConfig(
+        accounts=[
+            AccountConfig(
+                name="test_acc",
+                host="imap.test.local",
+                folders=["INBOX"],
+                sent_folder="NonExistentFolder",
+            )
+        ],
+        importance_threshold=5,
+        ollama=OllamaConfig(lan_url="http://lan:11434"),
+    )
+
+    client = FakeMailboxClient(uidvalidity=10)
+    client.folders.clear()
+    client.folders["INBOX"] = {
+        1: _make_email_bytes(
+            sender="vip@client.com",
+            subject="Ważna sprawa",
+            body="Pilna odpowiedź wymagana.",
+            message_id="<inbox1@client.com>",
+        )
+    }
+    store.set_last_uid("test_acc", "INBOX", 10, 0)
+
+    from mailvoice.core.analyzer import Analysis
+
+    ollama = OllamaClient("http://lan:11434", "http://127.0.0.1:11434")
+    ollama.classify = lambda _m, _md: Analysis(
+        importance=8, reason="Pilne", action="Odpisz", language="pl"
+    )
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda _: client,
+        ollama_client=ollama,
+    )
+
+    result = run_cycle(deps)
+
+    # Cykl nie uległ awarii - mail ze skrzynki odbiorczej został pomyślnie przetworzony
+    assert len(result.important) == 1
+    assert result.important[0].uid == 1
+    # Błąd brakującego folderu wysłanych został zarejestrowany w sposób przyjazny
+    assert len(result.errors) >= 1
+    assert any("folder" in err.lower() for err in result.errors)
+
+
+def test_sent_mail_indexing_idempotency(store):
+    config = AppConfig(
+        accounts=[
+            AccountConfig(
+                name="test_acc",
+                host="imap.test.local",
+                folders=["INBOX"],
+                sent_folder="Sent",
+            )
+        ],
+        importance_threshold=6,
+        ollama=OllamaConfig(lan_url="http://lan:11434"),
+    )
+
+    client = FakeMailboxClient(uidvalidity=10)
+    store.set_last_uid("test_acc", "INBOX", 10, 0)
+    client.folders["Sent"][1] = _make_email_bytes(
+        sender="me@mycompany.pl",
+        to="client@customer.com",
+        subject="Oferta",
+        body="Tekst oferty.",
+        message_id="<sent_id_1@mycompany.pl>",
+    )
+
+    ollama = OllamaClient("http://lan:11434", "http://127.0.0.1:11434")
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda _: client,
+        ollama_client=ollama,
+    )
+
+    # Cykl 1: indeksuje wiadomość wysłaną
+    res1 = run_cycle(deps)
+    assert len(res1.errors) == 0
+    all_recs = store.get_all_indexed_records()
+    assert len(all_recs) == 1
+    assert all_recs[0].direction == "out"
+
+    # Cykl 2: ponowne uruchomienie nie dubluje wpisów w mail_index
+    res2 = run_cycle(deps)
+    assert len(res2.errors) == 0
+    all_recs2 = store.get_all_indexed_records()
+    assert len(all_recs2) == 1

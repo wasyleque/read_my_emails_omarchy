@@ -9,8 +9,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "wizard_title": "Kreator konfiguracji MailVoice",
         "step1_title": "Witaj w MailVoice",
         "step1_intro": (
-            "Twój inteligentny asystent poczty, "
-            "który przeczyta najważniejsze wiadomości na głos."
+            "Twój inteligentny asystent poczty, który przeczyta najważniejsze wiadomości na głos."
         ),
         "step1_lang_label": "Wybierz język interfejsu i asystenta:",
         "step2_title": "Dodaj konto pocztowe",
@@ -71,8 +70,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "step5_voice_sample_text": "Dzień dobry. Asystent pocztowy MailVoice działa poprawnie.",
         "step6_title": "Wszystko gotowe!",
         "step6_desc": (
-            "Aplikacja została skonfigurowana. "
-            "Kliknij „Zakończ”, aby rozpocząć pracę asystenta."
+            "Aplikacja została skonfigurowana. Kliknij „Zakończ”, aby rozpocząć pracę asystenta."
         ),
         "btn_next": "Dalej >",
         "btn_back": "< Wstecz",
@@ -97,8 +95,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "no_important_emails": "Brak nowych ważnych maili. Wszystko pod kontrolą!",
         "backlog_dialog_title": "Zaległe nieprzeczytane wiadomości",
         "backlog_dialog_msg": (
-            "Masz {count} starszych nieprzeczytanych ważnych wiadomości. "
-            "Czy chcesz ich wysłuchać?"
+            "Masz {count} starszych nieprzeczytanych ważnych wiadomości. Czy chcesz ich wysłuchać?"
         ),
         "btn_yes": "Tak, posłuchaj",
         "btn_no": "Nie, pomiń",
@@ -136,9 +133,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "context_panel_title": "Kontekst nadawcy",
         "context_select_mail": "Wybierz wiadomość z listy, aby zobaczyć kontekst nadawcy.",
         "context_loading": "Wczytywanie kontekstu...",
-        "context_unknown_sender": (
-            "Nie znam jeszcze tego nadawcy w Twojej historii kontaktów."
-        ),
+        "context_unknown_sender": ("Nie znam jeszcze tego nadawcy w Twojej historii kontaktów."),
         "context_relationship": "Kim jest:",
         "context_open_items": "Otwarte sprawy:",
         "context_last_exchange": "Ostatnia wymiana:",
@@ -290,9 +285,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "context_panel_title": "Sender Context",
         "context_select_mail": "Select a message from the list to view sender context.",
         "context_loading": "Loading context...",
-        "context_unknown_sender": (
-            "I do not recognize this sender in your contact history yet."
-        ),
+        "context_unknown_sender": ("I do not recognize this sender in your contact history yet."),
         "context_relationship": "Who they are:",
         "context_open_items": "Open matters:",
         "context_last_exchange": "Last exchange:",

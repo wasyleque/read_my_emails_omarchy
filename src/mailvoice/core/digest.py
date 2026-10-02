@@ -134,14 +134,22 @@ def _determine_status(
     user_addrs: set[str],
     thread_records: list[MailIndexRecord],
 ) -> TopicStatus:
-    """Weryfikuje i dostosowuje status wątku w oparciu o ostatniego nadawcę."""
-    last_sender_clean = _clean_addr(last_sender)
-    is_user_last = last_sender_clean in user_addrs
-
+    """Weryfikuje i dostosowuje status wątku w oparciu o dane wątku i ostatnią wiadomość."""
     if raw_status in ("zamknięte", "informacyjne"):
         return raw_status  # type: ignore[return-value]
 
-    if is_user_last:
+    if thread_records:
+        last_rec = thread_records[-1]
+        direction = getattr(last_rec, "direction", "in")
+        if direction == "out":
+            return "oczekuje_na_innych"
+        # Fallback po adresach użytkownika dla starszych rekordów bez kierunku lub z innych kont
+        if user_addrs and _clean_addr(last_rec.sender) in user_addrs:
+            return "oczekuje_na_innych"
+        return "oczekuje_na_mnie"
+
+    last_sender_clean = _clean_addr(last_sender)
+    if user_addrs and last_sender_clean in user_addrs:
         return "oczekuje_na_innych"
 
     return "oczekuje_na_mnie"
@@ -151,12 +159,17 @@ def _fallback_who_to_whom(records: list[MailIndexRecord]) -> list[str]:
     """Generuje listę relacji kto-do-kogo bez użycia LLM."""
     lines: list[str] = []
     for r in records[-4:]:
-        sender = _clean_addr(r.sender) or r.sender
-        recips = ", ".join(
-            _clean_addr(a) for a in r.recipients.split(",") if _clean_addr(a)
-        )
         subj = clean_subject(r.subject)
-        lines.append(f"{sender} -> {recips}: {subj}")
+        direction = getattr(r, "direction", "in")
+        if direction == "out":
+            recips = (
+                ", ".join(_clean_addr(a) for a in r.recipients.split(",") if _clean_addr(a))
+                or "odbiorca"
+            )
+            lines.append(f"Ty -> {recips}: {subj}" if subj else f"Ty -> {recips}")
+        else:
+            sender = _clean_addr(r.sender) or r.sender or "nadawca"
+            lines.append(f"{sender} -> Ty: {subj}" if subj else f"{sender} -> Ty")
     return lines
 
 
@@ -220,9 +233,7 @@ def build_digest(
     for t_key in thread_keys_in_range:
         # Pobieramy wszystkie wiadomości z wątku do daty `until` dla pełnego kontekstu
         all_thread_records = store.get_records_for_thread(t_key)
-        thread_records = [
-            r for r in all_thread_records if not r.date or r.date <= until_iso
-        ]
+        thread_records = [r for r in all_thread_records if not r.date or r.date <= until_iso]
         if not thread_records:
             continue
 
@@ -265,18 +276,31 @@ def build_digest(
 
         summary_lines: list[str] = []
         for r in thread_records:
-            sender = _clean_addr(r.sender) or r.sender
+            direction = getattr(r, "direction", "in")
             dt_str = r.date[:16].replace("T", " ") if r.date else ""
             summary_content = r.summary or r.why or clean_subject(r.subject)
-            summary_lines.append(
-                f"- [{dt_str}] Od: {sender}, Do: {r.recipients}\n"
-                f"  Temat: {r.subject}\n"
-                f"  Streszczenie: {summary_content}"
-            )
+            if direction == "out":
+                recips = (
+                    ", ".join(_clean_addr(a) for a in r.recipients.split(",") if _clean_addr(a))
+                    or r.recipients
+                )
+                summary_lines.append(
+                    f"- [{dt_str}] (Wychodząca) Ty -> {recips}\n"
+                    f"  Temat: {r.subject}\n"
+                    f"  Treść/streszczenie: {summary_content}"
+                )
+            else:
+                sender = _clean_addr(r.sender) or r.sender
+                summary_lines.append(
+                    f"- [{dt_str}] (Przychodząca) {sender} -> Ty\n"
+                    f"  Temat: {r.subject}\n"
+                    f"  Streszczenie: {summary_content}"
+                )
 
+        last_dir = getattr(last_record, "direction", "in")
         user_content = (
             f"Adresy kont użytkownika: {', '.join(sorted(user_addrs))}\n"
-            f"Ostatni nadawca w wątku: {last_record.sender}\n\n"
+            f"Ostatni nadawca w wątku: {last_record.sender} (kierunek: {last_dir})\n\n"
             f"Wiadomości w wątku:\n" + "\n".join(summary_lines)
         )
 
@@ -288,7 +312,8 @@ def build_digest(
             "- title: krótki, zwięzły tytuł tematu/sprawy (max 1 zdanie)\n"
             "- why: cel i powód korespondencji (1-2 krótkie zdania)\n"
             "- status: 'oczekuje_na_mnie', 'oczekuje_na_innych', 'zamknięte' lub 'informacyjne'\n"
-            "- who_to_whom: lista podsumowująca kto do kogo pisał (np. 'Anna -> Jan: oferta')\n"
+            "- who_to_whom: lista podsumowująca kto do kogo pisał "
+            "(np. 'Anna -> Ty: oferta', 'Ty -> Anna: akceptacja')\n"
             "Maksymalnie 4 zdania łącznie. Zwróć tylko JSON zgodny ze schematem."
         )
 
@@ -299,11 +324,12 @@ def build_digest(
 
         title = clean_subject(last_record.subject) or "Temat korespondencji"
         why = last_record.why or last_record.summary or "Wątek wiadomości."
-        status_cand = (
-            "oczekuje_na_innych"
-            if _clean_addr(last_record.sender) in user_addrs
-            else "oczekuje_na_mnie"
-        )
+        if getattr(last_record, "direction", "in") == "out":
+            status_cand = "oczekuje_na_innych"
+        elif user_addrs and _clean_addr(last_record.sender) in user_addrs:
+            status_cand = "oczekuje_na_innych"
+        else:
+            status_cand = "oczekuje_na_mnie"
         who_to_whom = _fallback_who_to_whom(thread_records)
 
         try:

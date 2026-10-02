@@ -113,9 +113,7 @@ class SearchDialog(QDialog):
         self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setContentsMargins(4, 4, 4, 4)
 
-        self.lbl_empty = QLabel(
-            tr("search_input_placeholder")
-        )
+        self.lbl_empty = QLabel(tr("search_input_placeholder"))
         self.lbl_empty.setStyleSheet("color: #888; font-size: 12px; margin: 20px;")
         self.results_layout.addWidget(self.lbl_empty)
         self.results_layout.addStretch()

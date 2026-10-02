@@ -284,9 +284,7 @@ class MailService:
         contact = resolve_contact(self.store, address_or_name)
         card = None
         if contact is not None:
-            effective_days = (
-                days if (days is not None and days >= 1) else self.config.digest_days
-            )
+            effective_days = days if (days is not None and days >= 1) else self.config.digest_days
             card = build_contact_card(
                 store=self.store,
                 llm=self.ollama_client,
@@ -303,9 +301,7 @@ class MailService:
         limit: int = 5,
     ) -> list[SearchHit]:
         """Wyszukuje wiadomości AI w indeksie z uwzględnieniem okna czasowego."""
-        effective_days = (
-            days if (days is not None and days >= 1) else self.config.digest_days
-        )
+        effective_days = days if (days is not None and days >= 1) else self.config.digest_days
         hits = search(
             store=self.store,
             llm=self.ollama_client,
@@ -316,4 +312,3 @@ class MailService:
         )
         self._emit(SearchResults(query=query, hits=hits))
         return hits
-

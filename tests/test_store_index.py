@@ -120,3 +120,112 @@ def test_store_migration_without_data_loss(tmp_path):
     # Nowa tabela działa
     all_indexed = store_v2.get_all_indexed_records()
     assert len(all_indexed) == 0
+
+
+def test_mail_index_migration_adds_direction_column(tmp_path):
+    """Weryfikuje migrację istniejącej bazy mail_index bez kolumny direction."""
+    import sqlite3
+
+    db_file = tmp_path / "old_mail_index.db"
+    conn = sqlite3.connect(db_file)
+    cur = conn.cursor()
+    # Stara tabela mail_index bez kolumny direction
+    cur.execute("""
+        CREATE TABLE mail_index (
+            account TEXT,
+            folder TEXT,
+            uidvalidity INTEGER,
+            uid INTEGER,
+            message_id TEXT,
+            thread_key TEXT,
+            date TEXT,
+            sender TEXT,
+            recipients TEXT,
+            subject TEXT,
+            importance INTEGER,
+            why TEXT,
+            summary TEXT,
+            PRIMARY KEY(account, folder, uidvalidity, uid)
+        )
+    """)
+    cur.execute("""
+        INSERT INTO mail_index VALUES (
+            'acc1', 'INBOX', 1, 10, '<msg10@corp>', 'th10',
+            '2026-10-01T12:00:00+00:00', 'boss@corp.com', 'me@corp.com',
+            'Temat', 8, 'Ważne', 'Streszczenie'
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    # Otwarcie przez nową wersję Store - automatyczna migracja PRAGMA table_info
+    store = Store(str(db_file))
+    rec = store.get_mail_index("acc1", "INBOX", 1, 10)
+    assert rec is not None
+    # Domyślna wartość po migracji to 'in'
+    assert rec.direction == "in"
+
+    # Można zapisać nowy rekord z direction='out'
+    out_rec = MailIndexRecord(
+        account="acc1",
+        folder="Sent",
+        uidvalidity=1,
+        uid=20,
+        message_id="<msg20@corp>",
+        thread_key="th10",
+        date="2026-10-01T13:00:00+00:00",
+        sender="me@corp.com",
+        recipients="boss@corp.com",
+        subject="Re: Temat",
+        importance=0,
+        why="",
+        summary="",
+        direction="out",
+    )
+    store.save_mail_index(out_rec)
+
+    fetched_out = store.get_mail_index("acc1", "Sent", 1, 20)
+    assert fetched_out is not None
+    assert fetched_out.direction == "out"
+
+    # Wątek ma 2 wiadomości: jedną z direction='in' i jedną z 'out'
+    thread_recs = store.get_records_for_thread("th10")
+    assert len(thread_recs) == 2
+    assert thread_recs[0].direction == "in"
+    assert thread_recs[1].direction == "out"
+
+
+def test_mail_index_is_indexed_and_idempotency(tmp_path):
+    """Weryfikuje sprawdzanie is_indexed oraz brak duplikacji przy ponownym indeksowaniu."""
+    store = Store(str(tmp_path / "idempotent.db"))
+
+    assert store.is_indexed("acc1", "Sent", 5, 100) is False
+    assert store.is_indexed("acc1", "Sent", 5, 100, "<sent_100@corp>") is False
+
+    rec = MailIndexRecord(
+        account="acc1",
+        folder="Sent",
+        uidvalidity=5,
+        uid=100,
+        message_id="<sent_100@corp>",
+        thread_key="th1",
+        date="2026-10-01T12:00:00+00:00",
+        sender="me@corp.com",
+        recipients="dest@corp.com",
+        subject="Wysłana",
+        importance=0,
+        why="",
+        summary="",
+        direction="out",
+    )
+    store.save_mail_index(rec)
+
+    # Sprawdzenie po UID
+    assert store.is_indexed("acc1", "Sent", 5, 100) is True
+    # Sprawdzenie po message_id
+    assert store.is_indexed("acc1", "OtherFolder", 99, 999, "<sent_100@corp>") is True
+
+    # Ponowny zapis nie dubluje rekordu
+    store.save_mail_index(rec)
+    all_recs = store.get_all_indexed_records()
+    assert len(all_recs) == 1

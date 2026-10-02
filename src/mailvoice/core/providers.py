@@ -114,3 +114,30 @@ def get_provider_by_id(provider_id: str) -> ProviderInfo:
         if p.provider_id == provider_id:
             return p
     return PROVIDERS[-1]  # 'other'
+
+
+COMMON_SENT_FOLDERS: tuple[str, ...] = (
+    "Sent",
+    "Sent Items",
+    "Sent Messages",
+    "[Gmail]/Sent Mail",
+    "[Gmail]/Wysłane",
+    "Wysłane",
+    "Elementy wysłane",
+    "INBOX.Sent",
+    "INBOX.Wysłane",
+    "INBOX/Sent",
+)
+
+
+def get_sent_folder_candidates(configured: str | None = None) -> list[str]:
+    """Zwraca uporządkowaną listę potencjalnych nazw folderu wysłanych dla różnych dostawców."""
+    candidates: list[str] = []
+    if configured and configured.strip():
+        candidates.append(configured.strip())
+
+    for folder in COMMON_SENT_FOLDERS:
+        if folder not in candidates:
+            candidates.append(folder)
+
+    return candidates

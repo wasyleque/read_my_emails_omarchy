@@ -226,8 +226,10 @@ def test_dialog_handles_voice_unavailable(dummy_service):
     class BrokenSpeaker:
         def speak(self, text, lang="pl"):
             raise VoiceUnavailable("Brak silnika TTS")
+
         def stop(self):
             pass
+
         def set_volume(self, v):
             pass
 
@@ -414,4 +416,3 @@ def test_dialog_search_queries_and_speech(dummy_service):
     speaker.spoken.clear()
     dialog.handle_event(SearchResults(query="o fakturze", hits=[hit1]))
     assert any("Piotr Kowalski" in s for s, _ in speaker.spoken)
-

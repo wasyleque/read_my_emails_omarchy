@@ -78,8 +78,7 @@ def format_friendly_error(exc: Any, lang: str = "pl") -> str:
                 "Sprawdź, czy nazwa serwera (np. imap.example.com) została wpisana poprawnie."
             )
         return (
-            "Mail server host not found. "
-            "Please check the server address (e.g. imap.example.com)."
+            "Mail server host not found. Please check the server address (e.g. imap.example.com)."
         )
 
     # 5. Brak połączenia / Timeout / Odmowa
@@ -101,6 +100,28 @@ def format_friendly_error(exc: Any, lang: str = "pl") -> str:
         return (
             "Could not connect to the mail server. "
             "Check your internet connection and port number (default 993)."
+        )
+
+    # 6. Brak folderu (np. folderu Wysłane)
+    if "folder" in raw_str and any(
+        kw in raw_str
+        for kw in (
+            "wysłan",
+            "sent",
+            "nie odnaleziono",
+            "not found",
+            "does not exist",
+            "brak folderu",
+        )
+    ):
+        if is_pl:
+            return (
+                "Nie odnaleziono wskazanego folderu (np. folderu wiadomości wysłanych). "
+                "Sprawdź konfigurację folderów w ustawieniach konta."
+            )
+        return (
+            "The specified folder (e.g. sent messages folder) was not found. "
+            "Please check folder configuration in account settings."
         )
 
     # Domyślny przyjazny komunikat

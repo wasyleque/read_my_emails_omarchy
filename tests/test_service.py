@@ -377,4 +377,3 @@ def test_service_ai_search_emits_search_results(store, secret_store):
     assert isinstance(events[0], SearchResults)
     assert events[0].query == "faktura za serwer"
     assert len(events[0].hits) == 1
-

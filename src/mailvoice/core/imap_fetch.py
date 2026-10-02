@@ -6,6 +6,7 @@ from typing import Protocol, Sequence
 from imap_tools import A, MailBox
 
 from mailvoice.core.mailparse import ParsedMail, parse_raw
+from mailvoice.core.providers import get_sent_folder_candidates
 from mailvoice.core.store import Store
 
 
@@ -24,6 +25,10 @@ class MailboxClient(Protocol):
 
     def get_uids_greater_than(self, folder: str, min_uid: int) -> list[int]:
         """Pobiera posortowaną rosnąco listę UID większych niż min_uid."""
+        ...
+
+    def get_uids_since(self, folder: str, since_date: date) -> list[int]:
+        """Pobiera listę UID wiadomości od podanej daty."""
         ...
 
     def get_unseen_uids(self, folder: str, since_date: date) -> list[int]:
@@ -121,6 +126,22 @@ class ImapToolsClient:
         except Exception as exc:
             sanitized = self._sanitize_message(str(exc))
             raise FetchError(f"Błąd pobierania UID dla folderu '{folder}': {sanitized}") from None
+
+    def get_uids_since(self, folder: str, since_date: date) -> list[int]:
+        mailbox = self._get_mailbox()
+        try:
+            mailbox.folder.set(folder)
+            criteria = A(date_gte=since_date)
+            uid_strings = mailbox.uids(criteria)
+            uids = [int(u) for u in uid_strings if u.isdigit()]
+            return sorted(uids)
+        except FetchError:
+            raise
+        except Exception as exc:
+            sanitized = self._sanitize_message(str(exc))
+            raise FetchError(
+                f"Błąd pobierania UID od daty dla folderu '{folder}': {sanitized}"
+            ) from None
 
     def get_unseen_uids(self, folder: str, since_date: date) -> list[int]:
         mailbox = self._get_mailbox()
@@ -296,15 +317,29 @@ def commit_progress(
 
 def fetch_sent_message_ids(
     client: MailboxClient,
-    sent_folder: str,
+    sent_folder: str | None = None,
     days: int = 30,
 ) -> frozenset[str]:
     """Pobiera zbiór Message-ID z folderu wysłanych z ostatnich N dni.
 
     Wykorzystywane przez Rules.sent_message_ids.
     """
+    candidates = get_sent_folder_candidates(sent_folder)
+    working_folder: str | None = None
+    for cand in candidates:
+        try:
+            client.get_uidvalidity(cand)
+            working_folder = cand
+            break
+        except Exception:
+            continue
+
+    if not working_folder:
+        checked = ", ".join(candidates[:4])
+        raise FetchError(f"Nie odnaleziono folderu wiadomości wysłanych (sprawdzono: {checked})")
+
     since_date = date.today() - timedelta(days=days)
-    raw_ids = client.get_sent_message_ids(sent_folder, since_date)
+    raw_ids = client.get_sent_message_ids(working_folder, since_date)
 
     normalized: set[str] = set()
     for raw_id in raw_ids:
@@ -312,3 +347,76 @@ def fetch_sent_message_ids(
         if norm:
             normalized.add(norm)
     return frozenset(normalized)
+
+
+class SentItemsList(list[tuple[int, ParsedMail]]):
+    """Lista wiadomości wysłanych wraz z metadanymi folderu i uidvalidity."""
+
+    def __init__(
+        self,
+        items: Sequence[tuple[int, ParsedMail]] = (),
+        folder: str = "",
+        uidvalidity: int = 0,
+    ) -> None:
+        super().__init__(items)
+        self.folder = folder
+        self.uidvalidity = uidvalidity
+
+
+def fetch_sent_for_index(
+    client: MailboxClient,
+    store: Store,
+    account: str,
+    sent_folder: str | None = None,
+    days: int = 30,
+    limit: int = 100,
+) -> SentItemsList:
+    """Pobiera wysłane wiadomości z ostatnich N dni do zaindeksowania w mail_index.
+
+    Wiadomości nie są oznaczane jako przeczytane (BODY.PEEK).
+    Wiadomości już zaindeksowane w mail_index są pomijane.
+    """
+    candidates = get_sent_folder_candidates(sent_folder)
+    working_folder: str | None = None
+    uidvalidity: int = 0
+
+    for cand in candidates:
+        try:
+            uidvalidity = client.get_uidvalidity(cand)
+            working_folder = cand
+            break
+        except Exception:
+            continue
+
+    if not working_folder:
+        raise FetchError(
+            f"Nie odnaleziono folderu wiadomości wysłanych dla konta '{account}'. "
+            f"Sprawdzono m.in.: {', '.join(candidates[:4])}"
+        )
+
+    since_date = date.today() - timedelta(days=days)
+    uids = client.get_uids_since(working_folder, since_date)
+
+    # Pomijamy UID, które już są w mail_index
+    candidate_uids = [
+        u for u in uids if not store.is_indexed(account, working_folder, uidvalidity, u)
+    ]
+
+    if not candidate_uids:
+        return SentItemsList([], folder=working_folder, uidvalidity=uidvalidity)
+
+    # Bierzemy najnowsze wiadomości do limitu
+    if len(candidate_uids) > limit:
+        candidate_uids = candidate_uids[-limit:]
+
+    raw_items = client.fetch_raw_batch(working_folder, candidate_uids)
+    results: list[tuple[int, ParsedMail]] = []
+
+    for uid, raw_bytes in raw_items:
+        parsed = parse_raw(raw_bytes)
+        # Pomijamy jeśli message_id jest już w indeksie tego konta
+        if store.is_indexed(account, working_folder, uidvalidity, uid, parsed.message_id):
+            continue
+        results.append((uid, parsed))
+
+    return SentItemsList(results, folder=working_folder, uidvalidity=uidvalidity)

@@ -100,9 +100,7 @@ class AppConfig:
 
         index_retention_days = d.get("index_retention_days", 90)
         if index_retention_days < 1:
-            raise ValueError(
-                f"Index retention days must be >= 1, got: {index_retention_days}"
-            )
+            raise ValueError(f"Index retention days must be >= 1, got: {index_retention_days}")
 
         digest_days = d.get("digest_days", 30)
         if not (1 <= digest_days <= 365):

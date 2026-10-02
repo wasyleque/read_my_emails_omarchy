@@ -38,11 +38,12 @@ def _make_record(
     importance: int = 5,
     why: str = "Ważna sprawa",
     summary: str = "Krótkie streszczenie",
+    direction: str = "in",
 ) -> MailIndexRecord:
     dt = date or datetime.now(timezone.utc).isoformat()
     return MailIndexRecord(
         account="praca",
-        folder="INBOX",
+        folder="INBOX" if direction == "in" else "Sent",
         uidvalidity=1,
         uid=uid,
         message_id=f"<msg-{uid}@corp.com>",
@@ -54,6 +55,7 @@ def _make_record(
         importance=importance,
         why=why,
         summary=summary,
+        direction=direction,
     )
 
 
@@ -143,9 +145,7 @@ def test_build_digest_multi_threads_and_status():
                 "status": "oczekuje_na_innych",
                 "who_to_whom": ["Użytkownik -> Anna: aneks wysłany"],
             }
-        return httpx.Response(
-            200, json={"message": {"content": json.dumps(resp)}}
-        )
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
 
     client = _llm_client(handler)
     digest = build_digest(store, client, config)
@@ -319,3 +319,116 @@ def test_build_digest_llm_error_tolerance():
     titles = [t.title for t in digest.topics]
     assert "Wątek z błędem" in titles
     assert "Poprawny wątek" in titles
+
+
+def test_digest_status_progression_and_cache_invalidation():
+
+    store = Store(":memory:")
+    config = _make_config()
+    now = datetime.now(timezone.utc)
+
+    # 1. Przychodzący mail od Klienta -> oczekuje_na_mnie
+    store.save_mail_index(
+        _make_record(
+            thread_key="thread-order",
+            subject="Zamówienie 101",
+            sender="klient@abc.com",
+            recipients="me@corp.com",
+            uid=1,
+            date=(now - timedelta(hours=3)).isoformat(),
+            direction="in",
+        )
+    )
+
+    llm_calls = 0
+
+    def handler(request):
+        nonlocal llm_calls
+        llm_calls += 1
+        resp = {
+            "title": "Zamówienie 101",
+            "why": "Klient pyta o status zamówienia",
+            "status": "oczekuje_na_mnie",
+            "who_to_whom": ["klient -> Ty"],
+        }
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    client = _llm_client(handler)
+
+    d1 = build_digest(store, client, config)
+    assert len(d1.topics) == 1
+    assert d1.topics[0].status == "oczekuje_na_mnie"
+    assert llm_calls == 1
+
+    # Drugie wywołanie bez zmian w bazie -> korzysta z cache, brak nowego wywołania LLM
+    d1_cached = build_digest(store, client, config)
+    assert d1_cached.topics[0].status == "oczekuje_na_mnie"
+    assert llm_calls == 1
+
+    # 2. Użytkownik odpowiada (mail wychodzący w Sent, direction='out')
+    store.save_mail_index(
+        _make_record(
+            thread_key="thread-order",
+            subject="Re: Zamówienie 101",
+            sender="me@corp.com",
+            recipients="klient@abc.com",
+            uid=2,
+            date=(now - timedelta(hours=2)).isoformat(),
+            direction="out",
+        )
+    )
+    store.invalidate_topic_digest_cache("thread-order")
+
+    d2 = build_digest(store, client, config)
+    assert len(d2.topics) == 1
+    # Status zmienił się na 'oczekuje_na_innych' na podstawie ostatniej wiadomości wychodzącej
+    assert d2.topics[0].status == "oczekuje_na_innych"
+    # LLM został ponownie wywołany ze względu na nową wiadomość
+    assert llm_calls == 2
+
+    # 3. Nowa odpowiedź przychodząca od Klienta -> powrót do 'oczekuje_na_mnie'
+    store.save_mail_index(
+        _make_record(
+            thread_key="thread-order",
+            subject="Re: Zamówienie 101",
+            sender="klient@abc.com",
+            recipients="me@corp.com",
+            uid=3,
+            date=(now - timedelta(hours=1)).isoformat(),
+            direction="in",
+        )
+    )
+    store.invalidate_topic_digest_cache("thread-order")
+
+    d3 = build_digest(store, client, config)
+    assert len(d3.topics) == 1
+    assert d3.topics[0].status == "oczekuje_na_mnie"
+    assert llm_calls == 3
+
+
+def test_fallback_who_to_whom_bidirectional():
+    from mailvoice.core.digest import _fallback_who_to_whom
+
+    records = [
+        _make_record(
+            thread_key="th1",
+            subject="Oferta",
+            sender="anna@firm.com",
+            recipients="me@corp.com",
+            uid=1,
+            direction="in",
+        ),
+        _make_record(
+            thread_key="th1",
+            subject="Re: Oferta",
+            sender="me@corp.com",
+            recipients="anna@firm.com",
+            uid=2,
+            direction="out",
+        ),
+    ]
+
+    lines = _fallback_who_to_whom(records)
+    assert len(lines) == 2
+    assert "anna@firm.com -> Ty: Oferta" in lines[0]
+    assert "Ty -> anna@firm.com: Oferta" in lines[1]

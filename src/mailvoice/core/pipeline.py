@@ -13,11 +13,13 @@ from mailvoice.core.analyzer import (
     pick_model,
 )
 from mailvoice.core.config import AccountConfig, AppConfig
+from mailvoice.core.friendly_errors import format_friendly_error
 from mailvoice.core.imap_fetch import (
     MailboxClient,
     commit_progress,
     fetch_backlog,
     fetch_new,
+    fetch_sent_for_index,
     fetch_sent_message_ids,
 )
 from mailvoice.core.mailparse import ParsedMail
@@ -37,6 +39,7 @@ def _index_mail(
     importance: int,
     why: str,
     summary: str = "",
+    direction: str = "in",
 ) -> None:
     """Zapisuje metadane i podsumowanie przetworzonej wiadomości do tabeli mail_index."""
     date_str = mail.date.isoformat() if mail.date else datetime.now(timezone.utc).isoformat()
@@ -57,8 +60,10 @@ def _index_mail(
         importance=importance,
         why=why,
         summary=summary,
+        direction=direction,
     )
     store.save_mail_index(record)
+    store.invalidate_topic_digest_cache(key)
 
 
 @dataclass(frozen=True)
@@ -199,15 +204,42 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
 
         # Pobieramy Message-ID z folderu wysłanych do reguł
         sent_ids: frozenset[str] = frozenset()
+        sent_folder_err: str | None = None
         if account.sent_folder:
             try:
                 sent_ids = fetch_sent_message_ids(
                     client, account.sent_folder, days=deps.config.backlog_days
                 )
             except Exception as exc:
-                result.errors.append(
-                    f"Błąd pobierania wysłanych wiadomości z '{account.sent_folder}': {exc}"
+                sent_folder_err = format_friendly_error(exc, deps.config.language)
+                result.errors.append(sent_folder_err)
+
+        # Indeksujemy wysłane wiadomości (direction='out', importance=0, bez LLM)
+        try:
+            sent_items = fetch_sent_for_index(
+                client,
+                deps.store,
+                account.name,
+                sent_folder=account.sent_folder,
+                days=deps.config.backlog_days,
+            )
+            for s_uid, s_mail in sent_items:
+                _index_mail(
+                    deps.store,
+                    account.name,
+                    sent_items.folder,
+                    sent_items.uidvalidity,
+                    s_uid,
+                    s_mail,
+                    importance=0,
+                    why="",
+                    summary="",
+                    direction="out",
                 )
+        except Exception as exc:
+            err_msg = format_friendly_error(exc, deps.config.language)
+            if err_msg != sent_folder_err:
+                result.errors.append(err_msg)
 
         rules = Rules(
             vip_senders=tuple(deps.config.vip_senders),

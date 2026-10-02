@@ -7,7 +7,9 @@ from mailvoice.core.friendly_errors import format_friendly_error
 
 
 def test_gmail_app_password_error():
-    err_msg = "[AUTHENTICATIONFAILED] Application-specific password required: https://support.google.com"
+    err_msg = (
+        "[AUTHENTICATIONFAILED] Application-specific password required: https://support.google.com"
+    )
     msg_pl = format_friendly_error(err_msg, lang="pl")
     assert "Hasła do aplikacji" in msg_pl
     assert "myaccount.google.com" in msg_pl or "ustawieniach konta Google" in msg_pl

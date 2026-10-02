@@ -302,4 +302,3 @@ def test_search_dialog_smoke(qapp):
     dlg._listen_to_hit(hit)
     assert len(speaker.spoken) > 0
     assert "Faktura VAT 12/2026" in speaker.spoken[-1][0]
-
