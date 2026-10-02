@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSlider,
+    QSpinBox,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -214,6 +215,13 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(lists_layout)
 
+        # Okres podsumowania tematów (dni)
+        layout.addWidget(QLabel(tr("settings_digest_days_label")))
+        self.spin_digest_days = QSpinBox()
+        self.spin_digest_days.setRange(1, 365)
+        self.spin_digest_days.setValue(self.config.digest_days)
+        layout.addWidget(self.spin_digest_days)
+
     def _init_voice_tab(self) -> None:
         layout = QVBoxLayout(self.tab_voice)
 
@@ -280,6 +288,7 @@ class SettingsDialog(QDialog):
             self.list_vip.addItem(vip)
         for kw in self.config.keywords:
             self.list_kw.addItem(kw)
+        self.spin_digest_days.setValue(self.config.digest_days)
 
         # Głos
         idx = self.cb_interval.findData(self.config.interval_minutes)
@@ -395,6 +404,7 @@ class SettingsDialog(QDialog):
             ask_retry_minutes=self.config.ask_retry_minutes,
             importance_threshold=self.slider.value(),
             backlog_days=self.config.backlog_days,
+            digest_days=self.spin_digest_days.value(),
             language=get_language(),
             ollama=ollama_cfg,
         )

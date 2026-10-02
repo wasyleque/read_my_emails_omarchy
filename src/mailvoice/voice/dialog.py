@@ -4,19 +4,26 @@ Odpowiada za interakcję głosową z użytkownikiem (pytanie o czas, czytanie st
 obsługę komend: tak/nie/następny/powtórz/pomiń/stop/głośniej/wycisz).
 """
 
+import re
 import unicodedata
 from enum import Enum
 from typing import Callable, Sequence
 
+from mailvoice.core.aisearch import SearchHit
+from mailvoice.core.contacts import ContactCard
+from mailvoice.core.digest import Topic
 from mailvoice.core.mailparse import ParsedMail
 from mailvoice.core.pipeline import PendingBacklog, ProcessedMail
 from mailvoice.core.service import (
     AskReminder,
     BacklogQuestion,
     BeepReminder,
+    ContactCardReady,
+    DigestReady,
     Event,
     MailService,
     NewImportant,
+    SearchResults,
 )
 from mailvoice.core.summarizer import summarize as core_summarize
 from mailvoice.voice.beeper import Beeper, FakeBeeper
@@ -33,6 +40,9 @@ class VoiceCommand(str, Enum):
     STOP = "stop"
     LOUDER = "louder"
     QUIETER = "quieter"
+    DIGEST = "digest"
+    CONTACT = "contact"
+    SEARCH = "search"
     UNKNOWN = "unknown"
 
 
@@ -47,11 +57,43 @@ def normalize_speech(text: str | None) -> str:
     return " ".join(clean.lower().split())
 
 
+def parse_contact_query(text: str | None) -> str | None:
+    """Rozpoznaje zapytanie o kontakt ('kim jest X', 'co z X', 'who is X', 'what about X')."""
+    if not text:
+        return None
+    norm = normalize_speech(text)
+    m = re.search(r"\b(?:kim jest|co z|who is|what about)\s+(.+)", norm)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def parse_search_query(text: str | None) -> str | None:
+    """Rozpoznaje zapytanie wyszukiwania ('znajdź mail X', 'szukaj maila X', 'find email X')."""
+    if not text:
+        return None
+    norm = normalize_speech(text)
+    m = re.search(
+        r"\b(?:znajdz mail[a]?|znajdz wiadomosc|szukaj mail[a]?|szukaj wiadomosci|"
+        r"find email|search email|find mail|search mail)\s+(.+)",
+        norm,
+    )
+    if m:
+        return m.group(1).strip()
+    return None
+
+
 def classify_command(text: str | None) -> VoiceCommand:
     """Rozpoznaje intencję wypowiedzi użytkownika w języku polskim lub angielskim."""
     norm = normalize_speech(text)
     if not norm:
         return VoiceCommand.UNKNOWN
+
+    if parse_contact_query(text):
+        return VoiceCommand.CONTACT
+
+    if parse_search_query(text):
+        return VoiceCommand.SEARCH
 
     words = set(norm.split())
 
@@ -76,6 +118,11 @@ def classify_command(text: str | None) -> VoiceCommand:
     if any(w in norm for w in ("nastepny", "next", "dalej", "kolejny")):
         return VoiceCommand.NEXT
 
+    # Komenda podsumowania tematów (digest)
+    digest_words = {"podsumuj", "podsumowanie", "podsumujmy", "summarize", "digest"}
+    if (words & digest_words) or ("summarize" in norm):
+        return VoiceCommand.DIGEST
+
     # Potwierdzenie (Tak)
     yes_words = {
         "tak", "yes", "chce", "slucham", "jasne", "pewnie", "dawaj", "sure", "ok", "dobrze"
@@ -90,6 +137,24 @@ def classify_command(text: str | None) -> VoiceCommand:
         return VoiceCommand.NO
 
     return VoiceCommand.UNKNOWN
+
+
+def parse_digest_days(text: str | None) -> int | None:
+    """Rozpoznaje liczbę dni dla polecenia podsumowania."""
+    norm = normalize_speech(text)
+    if not norm:
+        return None
+    if any(w in norm for w in ("tydzien", "tygodnia", "week")):
+        return 7
+    if any(w in norm for w in ("miesiac", "miesiaca", "month")):
+        return 30
+    match = re.search(r"(\d+)\s*(dni|days|d)", norm)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            pass
+    return None
 
 
 class VoiceDialog:
@@ -172,6 +237,19 @@ class VoiceDialog:
 
         if isinstance(event, BacklogQuestion):
             self._handle_backlog_flow(event.items, event.count, lang)
+            return
+
+        if isinstance(event, DigestReady):
+            self._read_digest_topics(event.digest.topics, lang)
+            return
+
+        if isinstance(event, ContactCardReady):
+            self._read_contact_card(event.card, event.address_or_name, lang)
+            return
+
+        if isinstance(event, SearchResults):
+            self._read_search_hits(event.hits, event.query, lang)
+            return
 
     def _handle_ask_flow(self, count: int, lang: str) -> None:
         prompt = (
@@ -347,3 +425,232 @@ class VoiceDialog:
             else "That is all important messages.",
             lang,
         )
+
+    def handle_speech_command(self, text: str | None) -> bool:
+        """Obsługuje polecenie głosowe użytkownika. Zwraca True, jeśli zostało obsłużone."""
+        contact_target = parse_contact_query(text)
+        if contact_target:
+            card = self.service.contact_context(contact_target)
+            self._read_contact_card(card, contact_target, self.default_lang)
+            return True
+
+        search_target = parse_search_query(text)
+        if search_target:
+            hits = self.service.ai_search(search_target)
+            self._read_search_hits(hits, search_target, self.default_lang)
+            return True
+
+        cmd = classify_command(text)
+        if cmd == VoiceCommand.DIGEST:
+            days = parse_digest_days(text)
+            digest = self.service.request_digest(days)
+            self._read_digest_topics(digest.topics, self.default_lang)
+            return True
+        return False
+
+    def _read_digest_topics(self, topics: list[Topic], lang: str) -> None:
+        """Odczytuje kolejne tematy z podsumowania (digest) z możliwością nawigacji."""
+        if not topics:
+            self._speak_safely(
+                "Brak tematów w wybranym okresie."
+                if lang == "pl"
+                else "No topics found in the selected period.",
+                lang,
+            )
+            return
+
+        idx = 0
+        total = len(topics)
+
+        status_map_pl = {
+            "oczekuje_na_mnie": "czeka na Twoją odpowiedź.",
+            "oczekuje_na_innych": "czeka na odpowiedź innych.",
+            "zamknięte": "sprawa zakończona.",
+            "informacyjne": "wiadomość informacyjna.",
+        }
+        status_map_en = {
+            "oczekuje_na_mnie": "waiting for your response.",
+            "oczekuje_na_innych": "waiting for others to respond.",
+            "zamknięte": "topic closed.",
+            "informacyjne": "informational message.",
+        }
+
+        while idx < total:
+            topic = topics[idx]
+            w2w = f" {topic.who_to_whom[0]}." if topic.who_to_whom else ""
+            why_text = f" {topic.why}" if topic.why else ""
+
+            if lang == "pl":
+                st_text = status_map_pl.get(topic.status, "")
+                text = f"Temat {idx + 1} z {total}: {topic.title}.{w2w}{why_text} {st_text}"
+            else:
+                st_text = status_map_en.get(topic.status, "")
+                text = f"Topic {idx + 1} of {total}: {topic.title}.{w2w}{why_text} {st_text}"
+
+            self._speak_safely(" ".join(text.split()), lang)
+
+            if idx + 1 < total:
+                continue_prompt = "Czytać dalej?" if lang == "pl" else "Continue?"
+                self._speak_safely(continue_prompt, lang)
+                cmd_text = self.listener.listen(timeout_s=5.0)
+                cmd = classify_command(cmd_text)
+
+                if cmd == VoiceCommand.REPEAT:
+                    continue
+
+                if cmd in (VoiceCommand.STOP, VoiceCommand.NO):
+                    self._speak_safely(
+                        "Zatrzymano." if lang == "pl" else "Stopped.", lang
+                    )
+                    return
+
+                if cmd == VoiceCommand.LOUDER:
+                    current_vol = getattr(self.speaker, "volume", 1.0)
+                    self.speaker.set_volume(min(2.0, current_vol + 0.2))
+                    self._speak_safely("Głośniej." if lang == "pl" else "Louder.", lang)
+                    idx += 1
+                    continue
+
+                if cmd == VoiceCommand.QUIETER:
+                    current_vol = getattr(self.speaker, "volume", 1.0)
+                    self.speaker.set_volume(max(0.2, current_vol - 0.2))
+                    self._speak_safely("Ciszej." if lang == "pl" else "Quieter.", lang)
+                    idx += 1
+                    continue
+
+                idx += 1
+            else:
+                idx += 1
+
+        self._speak_safely(
+            "To wszystkie tematy z tego okresu."
+            if lang == "pl"
+            else "That is all topics for this period.",
+            lang,
+        )
+
+    def _read_contact_card(
+        self, card: ContactCard | None, query: str, lang: str
+    ) -> None:
+        """Odczytuje podsumowanie karty kontaktu lub oferuje wyszukiwanie AI, gdy nieznany."""
+        if card is None:
+            prompt = (
+                "Nie znam tego nadawcy. "
+                "Czy chcesz, abym wyszukał powiązane maile sztuczną inteligencją?"
+                if lang == "pl"
+                else (
+                    "I do not recognize this sender. "
+                    "Would you like me to search related emails with AI?"
+                )
+            )
+            self._speak_safely(prompt, lang)
+            ans = self.listener.listen(timeout_s=5.0)
+            cmd = classify_command(ans)
+            if cmd == VoiceCommand.YES:
+                hits = self.service.ai_search(query)
+                self._read_search_hits(hits, query, lang)
+            return
+
+        hint = f" {card.relationship_hint}." if card.relationship_hint else ""
+        why = f" {card.why_it_matters}." if card.why_it_matters else ""
+        open_it = (
+            f" Otwarte sprawy: {'; '.join(card.open_items)}."
+            if card.open_items
+            else ""
+        )
+        last_ex = ""
+        if card.last_exchange:
+            _, direction, s_text = card.last_exchange[0]
+            last_ex = f" Ostatnio: {direction}, {s_text}."
+
+        if lang == "pl":
+            text = f"Kontakt: {card.name}.{hint}{why}{open_it}{last_ex}"
+        else:
+            text = f"Contact: {card.name}.{hint}{why}{open_it}{last_ex}"
+
+        self._speak_safely(" ".join(text.split()), lang)
+
+    def _read_search_hits(
+        self, hits: list[SearchHit], query: str, lang: str
+    ) -> None:
+        """Odczytuje wyniki wyszukiwania wiadomości AI."""
+        if not hits:
+            self._speak_safely(
+                "Nie znalazłem pasujących wiadomości. "
+                "Zaproponuj dłuższy okres lub zmień zapytanie."
+                if lang == "pl"
+                else (
+                    "No matching messages found. "
+                    "Try expanding the timeframe or changing your query."
+                ),
+                lang,
+            )
+            return
+
+        idx = 0
+        total = len(hits)
+
+        while idx < total:
+            hit = hits[idx]
+            conf_text = {
+                "wysoka": "wysoka" if lang == "pl" else "high",
+                "średnia": "średnia" if lang == "pl" else "medium",
+                "niska": "niska" if lang == "pl" else "low",
+            }.get(hit.confidence, hit.confidence)
+
+            if lang == "pl":
+                text = (
+                    f"Wynik {idx + 1} z {total}. "
+                    f"Najbardziej prawdopodobny: Od {hit.mail_ref.sender}, "
+                    f"temat {hit.mail_ref.subject}, pewność {conf_text}. "
+                    f"Bo: {hit.why_probable}."
+                )
+            else:
+                text = (
+                    f"Result {idx + 1} of {total}. "
+                    f"Most probable: From {hit.mail_ref.sender}, "
+                    f"subject {hit.mail_ref.subject}, confidence {conf_text}. "
+                    f"Reason: {hit.why_probable}."
+                )
+
+            self._speak_safely(" ".join(text.split()), lang)
+
+            if idx + 1 < total:
+                continue_prompt = (
+                    "Czytać kolejny wynik?" if lang == "pl" else "Read next result?"
+                )
+                self._speak_safely(continue_prompt, lang)
+                cmd_text = self.listener.listen(timeout_s=5.0)
+                cmd = classify_command(cmd_text)
+
+                if cmd == VoiceCommand.REPEAT:
+                    continue
+                if cmd in (VoiceCommand.STOP, VoiceCommand.NO):
+                    self._speak_safely(
+                        "Zatrzymano." if lang == "pl" else "Stopped.", lang
+                    )
+                    return
+                if cmd == VoiceCommand.LOUDER:
+                    current_vol = getattr(self.speaker, "volume", 1.0)
+                    self.speaker.set_volume(min(2.0, current_vol + 0.2))
+                    self._speak_safely("Głośniej." if lang == "pl" else "Louder.", lang)
+                    idx += 1
+                    continue
+                if cmd == VoiceCommand.QUIETER:
+                    current_vol = getattr(self.speaker, "volume", 1.0)
+                    self.speaker.set_volume(max(0.2, current_vol - 0.2))
+                    self._speak_safely("Ciszej." if lang == "pl" else "Quieter.", lang)
+                    idx += 1
+                    continue
+
+                idx += 1
+            else:
+                idx += 1
+
+        self._speak_safely(
+            "To wszystkie znalezione wiadomości."
+            if lang == "pl"
+            else "That is all found messages.",
+            lang,
+        )
+

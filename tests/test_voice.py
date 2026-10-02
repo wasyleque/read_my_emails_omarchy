@@ -7,15 +7,33 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from mailvoice.core.aisearch import MailRef, SearchHit
 from mailvoice.core.config import AppConfig
+from mailvoice.core.contacts import ContactCard
 from mailvoice.core.mailparse import ParsedMail
 from mailvoice.core.pipeline import ProcessedMail
 from mailvoice.core.scheduler import NotificationAction
 from mailvoice.core.secrets import EncryptedFileStore
-from mailvoice.core.service import BacklogQuestion, BeepReminder, MailService, NewImportant
+from mailvoice.core.service import (
+    BacklogQuestion,
+    BeepReminder,
+    ContactCardReady,
+    DigestReady,
+    MailService,
+    NewImportant,
+    SearchResults,
+)
 from mailvoice.core.store import Store
 from mailvoice.voice.beeper import FakeBeeper
-from mailvoice.voice.dialog import VoiceCommand, VoiceDialog, classify_command, normalize_speech
+from mailvoice.voice.dialog import (
+    VoiceCommand,
+    VoiceDialog,
+    classify_command,
+    normalize_speech,
+    parse_contact_query,
+    parse_digest_days,
+    parse_search_query,
+)
 from mailvoice.voice.stt import FakeListener
 from mailvoice.voice.tts import FakeSpeaker, VoiceUnavailable
 
@@ -225,3 +243,175 @@ def test_dialog_handles_voice_unavailable(dummy_service):
     # Wywołanie nie może rzucić wyjątkiem
     dialog.handle_event(NewImportant(items=[_create_sample_mail(1)], action=NotificationAction.ASK))
     dialog.handle_event(BeepReminder(count=1))
+
+
+def test_dialog_digest_command_and_speech(dummy_service):
+    from mailvoice.core.digest import Digest, Participant, Topic
+
+    # Test rozpoznawania komend tekstowych/głosowych
+    assert classify_command("podsumuj miesiąc") == VoiceCommand.DIGEST
+    assert classify_command("podsumuj tydzień") == VoiceCommand.DIGEST
+    assert classify_command("summarize last month") == VoiceCommand.DIGEST
+    assert parse_digest_days("podsumuj tydzień") == 7
+    assert parse_digest_days("podsumuj miesiąc") == 30
+    assert parse_digest_days("podsumuj 14 dni") == 14
+
+    speaker = FakeSpeaker()
+    # Pierwszy topic -> powtórz, potem następny
+    listener = FakeListener(["powtórz", "następny"])
+    dialog = VoiceDialog(
+        speaker=speaker,
+        listener=listener,
+        service=dummy_service,
+    )
+
+    t1 = Topic(
+        title="Sprawa umowy",
+        participants=[Participant(address="anna@corp.com", role="from", count=1)],
+        who_to_whom=["Anna -> Jan w sprawie umowy"],
+        why="Czekamy na podpis.",
+        status="oczekuje_na_mnie",
+        last_activity=datetime.now(timezone.utc),
+        importance=8,
+        mail_count=1,
+    )
+    t2 = Topic(
+        title="Biuletyn techniczny",
+        participants=[Participant(address="news@it.com", role="from", count=1)],
+        who_to_whom=[],
+        why="Nowinki technologiczne.",
+        status="informacyjne",
+        last_activity=datetime.now(timezone.utc),
+        importance=3,
+        mail_count=1,
+    )
+    digest = Digest(period="ostatnie 30 dni", topics=[t1, t2])
+
+    dialog.handle_event(DigestReady(digest=digest))
+
+    spoken = [text for text, _ in speaker.spoken]
+    # Sprawa umowy powinna być przeczytana dwukrotnie przez "powtórz"
+    t1_reads = [s for s in spoken if "Sprawa umowy" in s]
+    assert len(t1_reads) == 2
+    assert any("czeka na Twoją odpowiedź" in s for s in t1_reads)
+
+    # Biuletyn przeczytany
+    assert any("Biuletyn techniczny" in s for s in spoken)
+    assert any("To wszystkie tematy z tego okresu" in s for s in spoken)
+
+
+def test_dialog_contact_queries_and_speech(dummy_service):
+    # Parsowanie zapytań
+    assert parse_contact_query("kim jest Kowalski") == "kowalski"
+    assert parse_contact_query("co z Anną") == "anna"
+    assert parse_contact_query("who is John Doe") == "john doe"
+    assert parse_contact_query("what about Alice") == "alice"
+    assert classify_command("kim jest Kowalski") == VoiceCommand.CONTACT
+
+    speaker = FakeSpeaker()
+    listener = FakeListener(["tak"])
+    dialog = VoiceDialog(speaker=speaker, listener=listener, service=dummy_service)
+
+    # 1. Nieznany kontakt - dialog informuje i pyta o szukanie AI
+    dummy_service.contact_context = MagicMock(return_value=None)
+    dummy_service.ai_search = MagicMock(return_value=[])
+
+    handled = dialog.handle_speech_command("kim jest Nieznajomy")
+    assert handled is True
+    dummy_service.contact_context.assert_called_with("nieznajomy")
+    spoken = [text for text, _ in speaker.spoken]
+    assert any("Nie znam tego nadawcy" in s for s in spoken)
+    # Po "tak" użytkownika, wywołano ai_search
+    dummy_service.ai_search.assert_called_with("nieznajomy")
+
+    # 2. Znany kontakt
+    card = ContactCard(
+        name="Jan Kowalski",
+        addresses=("jan@firma.pl",),
+        first_seen=datetime.now(timezone.utc),
+        last_contact=datetime.now(timezone.utc),
+        mail_count=3,
+        topics=[],
+        open_items=["Zatwierdzenie faktury"],
+        last_exchange=[(datetime.now(timezone.utc), "odebrany", "Faktura za remont")],
+        relationship_hint="Główny księgowy",
+        why_it_matters="Płatności i podatki",
+    )
+    dummy_service.contact_context = MagicMock(return_value=card)
+    speaker.spoken.clear()
+
+    handled = dialog.handle_speech_command("co z Kowalskim")
+    assert handled is True
+    spoken = [text for text, _ in speaker.spoken]
+    assert any("Główny księgowy" in s for s in spoken)
+    assert any("Zatwierdzenie faktury" in s for s in spoken)
+
+    # 3. Zdarzenie ContactCardReady
+    speaker.spoken.clear()
+    dialog.handle_event(ContactCardReady(card=card, address_or_name="jan@firma.pl"))
+    assert any("Jan Kowalski" in s for s, _ in speaker.spoken)
+
+
+def test_dialog_search_queries_and_speech(dummy_service):
+    # Parsowanie zapytań
+    assert parse_search_query("znajdź mail o fakturze") == "o fakturze"
+    assert parse_search_query("szukaj maila od Kowalskiego") == "od kowalskiego"
+    assert parse_search_query("find email about server") == "about server"
+    assert classify_command("znajdź mail o fakturze") == VoiceCommand.SEARCH
+
+    speaker = FakeSpeaker()
+    listener = FakeListener(["powtórz", "następny"])
+    dialog = VoiceDialog(speaker=speaker, listener=listener, service=dummy_service)
+
+    hit1 = SearchHit(
+        mail_ref=MailRef(
+            account="acc1",
+            folder="INBOX",
+            uidvalidity=1,
+            uid=10,
+            message_id="<m10@test>",
+            subject="Faktura za remont",
+            sender="Piotr Kowalski <k@test.pl>",
+            date="2026-10-01",
+        ),
+        score=0.9,
+        why_probable="Zgadza się nadawca oraz faktura remontowa.",
+        snippet="Załączam rozliczenie prac malarskich.",
+        confidence="wysoka",
+    )
+    hit2 = SearchHit(
+        mail_ref=MailRef(
+            account="acc1",
+            folder="INBOX",
+            uidvalidity=1,
+            uid=11,
+            message_id="<m11@test>",
+            subject="Oferta remontowa",
+            sender="Anna Nowak <n@test.pl>",
+            date="2026-09-20",
+        ),
+        score=0.7,
+        why_probable="Dotyczy prac remontowych.",
+        snippet="Cennik usług budowlanych.",
+        confidence="średnia",
+    )
+
+    dummy_service.ai_search = MagicMock(return_value=[hit1, hit2])
+
+    handled = dialog.handle_speech_command("znajdź mail o fakturze")
+    assert handled is True
+    dummy_service.ai_search.assert_called_with("o fakturze")
+
+    spoken = [text for text, _ in speaker.spoken]
+    # Hit 1 powinien być przeczytany 2 razy przez "powtórz"
+    hit1_reads = [s for s in spoken if "Piotr Kowalski" in s]
+    assert len(hit1_reads) == 2
+    assert any("Faktura za remont" in s for s in spoken)
+    assert any("Anna Nowak" in s for s in spoken)
+    assert any("To wszystkie znalezione wiadomości" in s for s in spoken)
+
+    # Test zdarzenia SearchResults
+    speaker.spoken.clear()
+    dialog.handle_event(SearchResults(query="o fakturze", hits=[hit1]))
+    assert any("Piotr Kowalski" in s for s, _ in speaker.spoken)
+

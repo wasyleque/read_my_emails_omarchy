@@ -66,6 +66,7 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 - [x] E10 ui: ustawienia (konta, opis analizy, VIP/słowa, interwał, tryb powiadomień, endpointy Ollama, głos).
 - [ ] E11 Integracja end-to-end + test na prawdziwej skrzynce (tylko odczyt).
 - [ ] E12 Pakowanie Windows/Linux.
+- [x] E13 Podsumowanie tematów (Digest), karty kontaktu (Contacts) i inteligentne wyszukiwanie wiadomości (AI Search) + GUI + głos.
 
 ## Podział pracy
 Claude = plan, zlecenia, wyrywkowa weryfikacja. agy (prawie tak mądry jak Claude, pane Herdr `w8:p3`) = logika, integracje,
@@ -91,3 +92,12 @@ Decyzje z etapu E7-E10 (batch 3):
   2. Zewnętrzna instalacja binarki Piper TTS na systemie hosta.
   3. Środowisko Windows (testowano na Linuxie w trybie offscreen).
   4. Fizyczny klucz FIDO2 (issue #4).
+
+Decyzje z etapu E13 (batch 4):
+- Baza i indeks (`mail_index`, SQLite): zachowywanie metadanych i podsumowań każdego maila (z retencją `index_retention_days`). NIGDY nie zapisujemy pełnej treści maila w bazie (zasada prywatności). Wyszukiwanie pełnotekstowe przez wirtualną tabelę FTS5 `mail_fts` z fallbackiem do LIKE.
+- Łączenie wątków (`src/mailvoice/core/threading.py`): algorytm `thread_key` oparty najpierw na korzeniu z nagłówków References/In-Reply-To, z fallbackiem na znormalizowany temat bez prefiksów (Re/Odp/Fwd itp.) oraz uczestników w oknie czasowym.
+- Podsumowanie tematów (`src/mailvoice/core/digest.py`): budowanie podsumowania tematów za N dni (`digest_days`, domyślnie 30) z cache w SQLite (`topic_digest_cache`). Klasyfikacja statusów ("oczekuje_na_mnie", "oczekuje_na_innych", "informacyjne", "zamknięte") na podstawie ostatniego nadawcy w relacji do adresów użytkownika.
+- Karty kontaktu (`src/mailvoice/core/contacts.py`): identyfikacja nadawców po adresach, nazwach i aliasach (`contacts`, `contact_addresses`). Generowanie kart `ContactCard` ze statusem relacji, otwartymi sprawami i historią wymiany. Cache w SQLite (`contact_card_cache`).
+- Inteligentne wyszukiwanie (`src/mailvoice/core/aisearch.py`): pipeline oparty na zapytaniach w języku naturalnym, LLM query expansion (synonimy, nadawcy, słowa kluczowe), wyszukiwaniu kandydatów w SQLite FTS5 i re-rankingu LLM z przypisaniem pewności (wysoka, średnia, niska). Dociąganie pełnej treści maila z IMAP tylko na żądanie dla pojedynczego podglądu (BODY.PEEK).
+- Głos i GUI: komendy mowy dla digestu ("podsumuj miesiąc/tydzień"), kontaktów ("kim jest...", "co z...") oraz wyszukiwania ("znajdź mail..."). W GUI: zakładka "Podsumowanie tematów" (karty spraw z grupami UX), panel "Kontekst nadawcy" w widoku wiadomości (z informacją o nieznanym kontakcie i podpowiedziami) oraz dedykowany dialog "Wyszukiwanie wiadomości (AI)". Pełna obsługa i18n (PL/EN) z parytetem kluczy i zrzuty ekranu w `docs/screenshots/`.
+

@@ -1,6 +1,7 @@
 """Moduł potoku przetwarzania poczty (pipeline) - czysta logika bez Qt i audio."""
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Callable, Sequence
 
 from mailvoice.core.analyzer import (
@@ -22,7 +23,42 @@ from mailvoice.core.imap_fetch import (
 from mailvoice.core.mailparse import ParsedMail
 from mailvoice.core.rules import MailInfo, Rules
 from mailvoice.core.rules import evaluate as rules_evaluate
-from mailvoice.core.store import Store
+from mailvoice.core.store import MailIndexRecord, Store
+from mailvoice.core.threading import thread_key
+
+
+def _index_mail(
+    store: Store,
+    account: str,
+    folder: str,
+    uidvalidity: int,
+    uid: int,
+    mail: ParsedMail,
+    importance: int,
+    why: str,
+    summary: str = "",
+) -> None:
+    """Zapisuje metadane i podsumowanie przetworzonej wiadomości do tabeli mail_index."""
+    date_str = mail.date.isoformat() if mail.date else datetime.now(timezone.utc).isoformat()
+    recipients_list = [*mail.to, *mail.cc]
+    recipients_str = ", ".join(recipients_list)
+    key = thread_key(mail)
+    record = MailIndexRecord(
+        account=account,
+        folder=folder,
+        uidvalidity=uidvalidity,
+        uid=uid,
+        message_id=mail.message_id,
+        thread_key=key,
+        date=date_str,
+        sender=mail.sender,
+        recipients=recipients_str,
+        subject=mail.subject,
+        importance=importance,
+        why=why,
+        summary=summary,
+    )
+    store.save_mail_index(record)
 
 
 @dataclass(frozen=True)
@@ -237,6 +273,16 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                             status="analyzed",
                             importance=0,
                         )
+                        _index_mail(
+                            deps.store,
+                            account.name,
+                            folder,
+                            uidvalidity,
+                            uid,
+                            mail,
+                            importance=0,
+                            why="; ".join(rule_res.reasons) or "Zablokowany nadawca",
+                        )
                         continue
 
                     messages = build_messages(
@@ -326,6 +372,17 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                             importance=final_importance,
                         )
 
+                    _index_mail(
+                        deps.store,
+                        account.name,
+                        folder,
+                        uidvalidity,
+                        uid,
+                        mail,
+                        importance=final_importance,
+                        why=analysis.reason,
+                    )
+
             if is_first_run:
                 if not backlog_ok:
                     continue  # ponowimy w następnym cyklu
@@ -362,6 +419,16 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         mail.message_id,
                         status="analyzed",
                         importance=0,
+                    )
+                    _index_mail(
+                        deps.store,
+                        account.name,
+                        folder,
+                        uidvalidity,
+                        uid,
+                        mail,
+                        importance=0,
+                        why="; ".join(rule_res.reasons) or "Zablokowany nadawca",
                     )
                     last_committed_uid = max(last_committed_uid, uid)
                     continue
@@ -437,6 +504,17 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     language=analysis.language,
                 )
 
+                _index_mail(
+                    deps.store,
+                    account.name,
+                    folder,
+                    uidvalidity,
+                    uid,
+                    mail,
+                    importance=final_importance,
+                    why=analysis.reason,
+                )
+
                 if final_importance >= deps.config.importance_threshold:
                     result.important.append(processed)
 
@@ -444,4 +522,5 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
             if last_committed_uid > last_uid:
                 commit_progress(deps.store, account.name, folder, uidvalidity, last_committed_uid)
 
+    deps.store.purge_older_than(deps.config.index_retention_days)
     return result

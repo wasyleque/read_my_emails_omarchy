@@ -20,10 +20,16 @@ Nothing is ever sent, deleted or marked as read.*
 4. Powiadomienie: powtarzany sygnał dźwiękowy **albo** pytanie głosowe "masz czas wysłuchać nowych maili?".
 5. Zaległe, **nieprzeczytane** starsze maile, które wyglądają na ważne, są zgłaszane osobno: aplikacja pyta, czy
    chcesz usłyszeć ich streszczenia.
+6. **Podsumowanie tematów (Digest):** analiza wątków z wybranego okresu (tydzień, miesiąc, kwartał) — łączy kropki:
+   kto do kogo i w jakiej sprawie pisał, dlaczego oraz na kogo czeka odpowiedź ("Czeka na Ciebie" / "Czeka na innych" / "Informacje").
+7. **Karta kontaktu i kontekst:** w widoku maila wyświetla kim jest nadawca, otwarte sprawy i ostatnie wymiany.
+8. **Inteligentne wyszukiwanie AI:** znajdowanie wiadomości na podstawie zapytań w języku naturalnym
+   (np. *"ten mail od Kowalskiego o fakturze za remont"*), z rozszerzaniem kontekstu, indeksem SQLite FTS5 i oceną prawdopodobieństwa (wysoka/średnia/niska pewność).
 
-**Prywatność i bezpieczeństwo:** dostęp do poczty jest wyłącznie do odczytu (`BODY.PEEK`, flagi się nie zmieniają),
-treść maili trafia tylko do Twojego Ollamy, a hasła mają być trzymane w systemowym keyringu (w planach opcjonalnie
-szyfrowanie kluczem FIDO2). Treści maili i haseł nie logujemy.
+**Prywatność i bezpieczeństwo:** dostęp do poczty jest wyłącznie do odczytu (`BODY.PEEK`, flagi się nie zmieniają).
+Tabela indeksu wiadomości w SQLite (`mail_index`) przechowuje **wyłącznie metadane oraz krótkie streszczenia — NIGDY pełną treść maili**.
+Treść maili trafia tylko do lokalnego modelu Ollama na Twoim komputerze lub w sieci LAN, a hasła przechowywane są w bezpiecznym
+sejfie (Keyring, AES-256-GCM z scrypt lub klucz FIDO2). Treści maili i haseł nigdy nie logujemy.
 
 ## Stan prac
 

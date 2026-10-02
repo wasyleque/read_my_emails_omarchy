@@ -5,8 +5,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Sequence
 
+from mailvoice.core.aisearch import SearchHit, search
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import AccountConfig, AppConfig
+from mailvoice.core.contacts import (
+    ContactCard,
+    build_contact_card,
+    resolve_contact,
+)
+from mailvoice.core.digest import Digest, build_digest
 from mailvoice.core.imap_fetch import FetchError, ImapToolsClient, MailboxClient
 from mailvoice.core.pipeline import (
     CycleResult,
@@ -62,10 +69,42 @@ class ServiceError:
     account: str | None = None
 
 
+@dataclass(frozen=True)
+class DigestReady:
+    """Zdarzenie wygenerowania podsumowania tematów."""
+
+    digest: Digest
+
+
+@dataclass(frozen=True)
+class ContactCardReady:
+    """Zdarzenie wygenerowania karty kontaktu."""
+
+    card: ContactCard | None
+    address_or_name: str
+
+
+@dataclass(frozen=True)
+class SearchResults:
+    """Zdarzenie znalezienia wiadomości przez AI."""
+
+    query: str
+    hits: list[SearchHit]
+
+
 # Alias dla kompatybilności wstecznej
 Error = ServiceError
 
-Event = NewImportant | BacklogQuestion | BeepReminder | AskReminder | ServiceError
+Event = (
+    NewImportant
+    | BacklogQuestion
+    | BeepReminder
+    | AskReminder
+    | ServiceError
+    | DigestReady
+    | ContactCardReady
+    | SearchResults
+)
 
 
 class MailService:
@@ -220,3 +259,61 @@ class MailService:
         """Rozstrzyga status zaległości po odpowiedzi użytkownika (tak/nie)."""
         to_resolve = items if items is not None else load_pending_backlog(self.store)
         pipeline_resolve_backlog(self.store, to_resolve, accepted)
+
+    def request_digest(self, days: int | None = None) -> Digest:
+        """Generuje podsumowanie wątków za podaną liczbę dni (lub domyślnie z configu)."""
+        effective_days = days if (days is not None and days >= 1) else self.config.digest_days
+        now = self._clock()
+        since_dt = now - timedelta(days=effective_days)
+        digest = build_digest(
+            store=self.store,
+            client=self.ollama_client,
+            config=self.config,
+            since=since_dt,
+            until=now,
+        )
+        self._emit(DigestReady(digest=digest))
+        return digest
+
+    def contact_context(
+        self,
+        address_or_name: str,
+        days: int | None = None,
+    ) -> ContactCard | None:
+        """Pobiera kontekst kontaktu (kartę) na podstawie adresu lub nazwy."""
+        contact = resolve_contact(self.store, address_or_name)
+        card = None
+        if contact is not None:
+            effective_days = (
+                days if (days is not None and days >= 1) else self.config.digest_days
+            )
+            card = build_contact_card(
+                store=self.store,
+                llm=self.ollama_client,
+                contact=contact,
+                days=effective_days,
+            )
+        self._emit(ContactCardReady(card=card, address_or_name=address_or_name))
+        return card
+
+    def ai_search(
+        self,
+        query: str,
+        days: int | None = None,
+        limit: int = 5,
+    ) -> list[SearchHit]:
+        """Wyszukuje wiadomości AI w indeksie z uwzględnieniem okna czasowego."""
+        effective_days = (
+            days if (days is not None and days >= 1) else self.config.digest_days
+        )
+        hits = search(
+            store=self.store,
+            llm=self.ollama_client,
+            query=query,
+            days=effective_days,
+            limit=limit,
+            config=self.config,
+        )
+        self._emit(SearchResults(query=query, hits=hits))
+        return hits
+

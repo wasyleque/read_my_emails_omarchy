@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSlider,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWizard,
@@ -456,6 +457,13 @@ class ImportancePage(QWizardPage):
 
         layout.addLayout(lists_layout)
 
+        # Okres podsumowania tematów (dni)
+        layout.addWidget(QLabel(tr("step4_digest_days_label")))
+        self.spin_digest_days = QSpinBox()
+        self.spin_digest_days.setRange(1, 365)
+        self.spin_digest_days.setValue(30)
+        layout.addWidget(self.spin_digest_days)
+
     def _add_vip(self) -> None:
         text = self.txt_vip_input.text().strip()
         if text:
@@ -486,6 +494,9 @@ class ImportancePage(QWizardPage):
 
     def get_analysis_prompt(self) -> str:
         return self.txt_desc.toPlainText().strip()
+
+    def get_digest_days(self) -> int:
+        return self.spin_digest_days.value()
 
 
 class VoicePage(QWizardPage):
@@ -631,6 +642,7 @@ class SetupWizard(QWizard):
             ask_retry_minutes=15,
             importance_threshold=self.page_importance.get_importance_threshold(),
             backlog_days=30,
+            digest_days=self.page_importance.get_digest_days(),
             language=get_language(),
             ollama=ollama,
         )

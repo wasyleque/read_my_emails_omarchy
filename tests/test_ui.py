@@ -171,3 +171,135 @@ def test_settings_dialog_smoke(qapp, tmp_path, monkeypatch):
     assert saved_configs[0].importance_threshold == 7
     assert saved_configs[0].analysis_prompt == "Nowy opis reguł"
     assert config_path.exists()
+
+
+def test_main_window_digest_tab_smoke(qapp):
+    """Smoke test zakładki Podsumowanie w MainWindow oraz odtwarzania tematu."""
+    from mailvoice.core.digest import Digest, Participant, Topic
+
+    speaker = FakeSpeaker()
+    window = MainWindow(speaker=speaker)
+
+    assert window.tabs.count() == 2
+    assert window.tabs.tabText(0) == "Wiadomości"
+    assert window.tabs.tabText(1) == "Podsumowanie tematów"
+
+    topic = Topic(
+        title="Oferta sprzętu biurowego",
+        participants=[Participant(address="sales@biuro.pl", role="from", count=1)],
+        who_to_whom=["sales@biuro.pl -> me@corp.com"],
+        why="Przesłanie zaktualizowanego cennika laptopów.",
+        status="oczekuje_na_mnie",
+        last_activity=datetime.now(timezone.utc),
+        importance=8,
+        mail_count=1,
+    )
+    digest = Digest(period="ostatnie 30 dni", topics=[topic])
+
+    window._display_digest(digest)
+    assert window.digest_layout.count() > 0
+
+    window._listen_to_topic(topic)
+    assert len(speaker.spoken) > 0
+    assert "Oferta sprzętu biurowego" in speaker.spoken[-1][0]
+
+
+def test_main_window_context_panel_smoke(qapp):
+    """Smoke test panelu kontekstu kontaktu w oknie głównym."""
+    from mailvoice.core.contacts import ContactCard
+
+    speaker = FakeSpeaker()
+    window = MainWindow(speaker=speaker)
+
+    assert hasattr(window, "group_context")
+    assert hasattr(window, "btn_ai_search")
+
+    # Dodanie wiadomości
+    item = ProcessedMail(
+        account="acc1",
+        folder="INBOX",
+        uidvalidity=1,
+        uid=1,
+        mail=ParsedMail(
+            message_id="<m1@test>",
+            sender="Piotr Kowalski <kowalski@budowa.pl>",
+            subject="Faktura remontowa",
+            date=datetime.now(timezone.utc),
+            in_reply_to=None,
+            references=(),
+            body_text="Treść maila...",
+        ),
+        final_importance=8,
+        rule_reasons=(),
+        analysis_reason="Ważna płatność",
+        action="read_now",
+        language="pl",
+    )
+    window._add_important_mail(item)
+    assert window.tbl_mails.rowCount() == 1
+
+    # 1. Wyświetlenie nieznanego kontaktu
+    window._display_contact_card(None, item.mail.sender)
+    assert "Nie znam jeszcze tego nadawcy" in window.lbl_context_details.text()
+    assert window.btn_context_search.isEnabled()
+
+    # 2. Wyświetlenie znanej karty kontaktu
+    card = ContactCard(
+        name="Piotr Kowalski",
+        addresses=("kowalski@budowa.pl",),
+        first_seen=datetime.now(timezone.utc),
+        last_contact=datetime.now(timezone.utc),
+        mail_count=5,
+        topics=[],
+        open_items=["Zatwierdzenie faktury 45/2026"],
+        last_exchange=[(datetime.now(timezone.utc), "odebrany", "Faktura za remont biura")],
+        relationship_hint="Główny wykonawca remontu",
+        why_it_matters="Płatność za prace wykończeniowe",
+    )
+    window._display_contact_card(card, item.mail.sender)
+    assert "Piotr Kowalski" in window.lbl_context_details.text()
+    assert "Główny wykonawca remontu" in window.lbl_context_details.text()
+    assert "Zatwierdzenie faktury" in window.lbl_context_details.text()
+    assert window.btn_context_search.isEnabled()
+
+
+def test_search_dialog_smoke(qapp):
+    """Smoke test okna dialogowego wyszukiwania AI."""
+    from mailvoice.core.aisearch import MailRef, SearchHit
+    from mailvoice.ui.search_dialog import SearchDialog
+
+    speaker = FakeSpeaker()
+    dlg = SearchDialog(speaker=speaker)
+
+    assert dlg.txt_query is not None
+    assert dlg.cb_period.count() == 3
+
+    # Brak wyników
+    dlg._display_hits([])
+    assert "Nie znaleziono pasujących wiadomości" in dlg.results_layout.itemAt(0).widget().text()
+
+    # Wynik z wysoką pewnością
+    hit = SearchHit(
+        mail_ref=MailRef(
+            account="acc1",
+            folder="INBOX",
+            uidvalidity=1,
+            uid=42,
+            message_id="<m42@test>",
+            subject="Faktura VAT 12/2026",
+            sender="Księgowość <ksiegowosc@firma.pl>",
+            date="2026-10-01",
+        ),
+        score=0.95,
+        why_probable="Zgadza się numer faktury i temat.",
+        snippet="Faktura za usługi informatyczne.",
+        confidence="wysoka",
+    )
+    dlg._display_hits([hit])
+    assert dlg.results_layout.count() >= 2  # card + stretch
+
+    # Posłuchaj wyniku
+    dlg._listen_to_hit(hit)
+    assert len(speaker.spoken) > 0
+    assert "Faktura VAT 12/2026" in speaker.spoken[-1][0]
+

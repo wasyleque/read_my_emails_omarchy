@@ -2,7 +2,7 @@ import email
 import email.policy
 from dataclasses import dataclass
 from datetime import datetime
-from email.utils import parsedate_to_datetime
+from email.utils import getaddresses, parsedate_to_datetime
 
 from mailvoice.core.textutil import clean_body, html_to_text
 
@@ -16,6 +16,8 @@ class ParsedMail:
     in_reply_to: str | None
     references: tuple[str, ...]
     body_text: str
+    to: tuple[str, ...] = ()
+    cc: tuple[str, ...] = ()
 
 
 def parse_raw(raw: bytes) -> ParsedMail:
@@ -55,6 +57,22 @@ def parse_raw(raw: bytes) -> ParsedMail:
             content = html_to_text(content)
         body_text = clean_body(content)
 
+    # Extract recipients (To and Cc)
+    def _extract_addrs(header_name: str) -> tuple[str, ...]:
+        header_vals = msg.get_all(header_name, [])
+        if not header_vals:
+            return ()
+        raw_tuples = getaddresses(header_vals)
+        res: list[str] = []
+        for _name, addr in raw_tuples:
+            clean = addr.strip().lower()
+            if clean and clean not in res:
+                res.append(clean)
+        return tuple(res)
+
+    to_addrs = _extract_addrs("to")
+    cc_addrs = _extract_addrs("cc")
+
     return ParsedMail(
         message_id=message_id,
         sender=sender,
@@ -63,4 +81,6 @@ def parse_raw(raw: bytes) -> ParsedMail:
         in_reply_to=in_reply_to,
         references=references,
         body_text=body_text,
+        to=to_addrs,
+        cc=cc_addrs,
     )

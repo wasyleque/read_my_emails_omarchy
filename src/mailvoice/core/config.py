@@ -39,6 +39,9 @@ class AppConfig:
     importance_threshold: int = 6
     backlog_days: int = 30
     language: str = "auto"  # 'auto', 'pl', or 'en'
+    index_retention_days: int = 90
+    digest_days: int = 30
+    my_addresses: List[str] = field(default_factory=list)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
 
     def to_dict(self) -> dict:
@@ -95,6 +98,18 @@ class AppConfig:
         if ask_retry_minutes < 1:
             raise ValueError(f"Ask retry minutes must be >= 1, got: {ask_retry_minutes}")
 
+        index_retention_days = d.get("index_retention_days", 90)
+        if index_retention_days < 1:
+            raise ValueError(
+                f"Index retention days must be >= 1, got: {index_retention_days}"
+            )
+
+        digest_days = d.get("digest_days", 30)
+        if not (1 <= digest_days <= 365):
+            raise ValueError(f"Digest days must be between 1 and 365, got: {digest_days}")
+
+        my_addresses = d.get("my_addresses", [])
+
         # Create instance with defaults for missing fields
         return cls(
             accounts=accounts,
@@ -109,6 +124,9 @@ class AppConfig:
             importance_threshold=importance_threshold,
             backlog_days=d.get("backlog_days", 30),
             language=language,
+            index_retention_days=index_retention_days,
+            digest_days=digest_days,
+            my_addresses=my_addresses,
             ollama=ollama,
         )
 

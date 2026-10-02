@@ -149,6 +149,42 @@ class OllamaClient:
 
         raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
 
+    def chat_json(self, messages: List[Dict], model: str, schema: dict) -> dict:
+        """Wysyła zapytanie do Ollamy ze zdefiniowanym schematem JSON i zwraca słownik."""
+        urls = (
+            [self.cfg.lan_url, self.cfg.local_url]
+            if self.cfg.prefer == "lan"
+            else [self.cfg.local_url, self.cfg.lan_url]
+        )
+
+        last_error = None
+
+        for url in urls:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": False,
+                    "format": schema,
+                    "options": {"temperature": 0.1},
+                }
+
+                with httpx.Client(transport=self.transport, timeout=self.cfg.timeout_s) as client:
+                    response = client.post(f"{url}/api/chat", json=payload)
+                    response.raise_for_status()
+
+                data = response.json()
+                content = str(data.get("message", {}).get("content", "")).strip()
+                try:
+                    return json.loads(content)
+                except (ValueError, json.JSONDecodeError) as exc:
+                    raise AnalyzerFormatError(f"Niepoprawny JSON z Ollamy: {exc}") from exc
+            except (httpx.HTTPError, KeyError) as e:
+                last_error = e
+                continue
+
+        raise AnalyzerTransportError(f"All Ollama endpoints failed: {last_error}")
+
 
 def _parse_response(response: httpx.Response) -> Analysis:
     """Parsuje odpowiedź /api/chat; każdy błąd formatu -> AnalyzerFormatError."""

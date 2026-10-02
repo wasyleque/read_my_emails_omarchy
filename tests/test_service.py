@@ -15,11 +15,13 @@ from mailvoice.core.service import (
     AskReminder,
     BacklogQuestion,
     BeepReminder,
+    ContactCardReady,
     MailService,
     NewImportant,
+    SearchResults,
     ServiceError,
 )
-from mailvoice.core.store import Store
+from mailvoice.core.store import MailIndexRecord, Store
 from tests.test_imap_fetch import FakeMailboxClient
 from tests.test_scheduler import FakeClock
 
@@ -265,3 +267,114 @@ def test_service_restores_pending_backlog_on_startup(store, secret_store):
     assert isinstance(events[0], BacklogQuestion)
     assert events[0].count == 1
     assert events[0].items[0].uid == 10
+
+
+def test_service_contact_context_emits_event(store, secret_store):
+    config = AppConfig()
+
+    def handler(request):
+        resp = {
+            "relationship_hint": "Główny księgowy",
+            "why_it_matters": "Rozliczenia kwartalne i podatki",
+            "open_items": ["Zatwierdzenie faktury 45/2026"],
+        }
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    client = OllamaClient(config.ollama, transport=httpx.MockTransport(handler))
+    service = MailService(
+        config=config,
+        store=store,
+        secret_store=secret_store,
+        ollama_client=client,
+    )
+
+    # 1. Nieznany kontakt
+    card_none = service.contact_context("nieznany@test.pl")
+    assert card_none is None
+    events = service.poll_events()
+    assert len(events) == 1
+    assert isinstance(events[0], ContactCardReady)
+    assert events[0].card is None
+    assert events[0].address_or_name == "nieznany@test.pl"
+
+    # 2. Znany kontakt w indeksie
+    record = MailIndexRecord(
+        account="acc1",
+        folder="INBOX",
+        uidvalidity=1,
+        uid=1,
+        message_id="<m1@local>",
+        thread_key="t1",
+        date="2026-10-01T12:00:00+00:00",
+        sender="Jan Kowalski <jan@firma.pl>",
+        recipients="me@corp.com",
+        subject="Faktura 45/2026",
+        importance=8,
+        why="Płatność",
+        summary="Przesyłam fakturę.",
+    )
+    store.save_mail_index(record)
+
+    card = service.contact_context("jan@firma.pl")
+    assert card is not None
+    assert card.name == "Jan Kowalski"
+    assert "księgowy" in card.relationship_hint
+
+    events = service.poll_events()
+    assert len(events) == 1
+    assert isinstance(events[0], ContactCardReady)
+    assert events[0].card == card
+
+
+def test_service_ai_search_emits_search_results(store, secret_store):
+    config = AppConfig()
+
+    record = MailIndexRecord(
+        account="acc1",
+        folder="INBOX",
+        uidvalidity=1,
+        uid=10,
+        message_id="<m10@local>",
+        thread_key="t10",
+        date="2026-10-01T12:00:00+00:00",
+        sender="Piotr Nowak <nowak@firma.pl>",
+        recipients="me@corp.com",
+        subject="Faktura za serwery",
+        importance=8,
+        why="Opłata",
+        summary="Faktura miesięczna za hosting.",
+    )
+    store.save_mail_index(record)
+
+    def handler(request):
+        resp = {
+            "ranked_uids": [
+                {
+                    "uid": 10,
+                    "score": 0.9,
+                    "confidence": "wysoka",
+                    "why_probable": "Faktura za serwery zgadza się z tematem.",
+                }
+            ]
+        }
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    client = OllamaClient(config.ollama, transport=httpx.MockTransport(handler))
+    service = MailService(
+        config=config,
+        store=store,
+        secret_store=secret_store,
+        ollama_client=client,
+    )
+
+    hits = service.ai_search("faktura za serwer")
+    assert len(hits) == 1
+    assert hits[0].mail_ref.uid == 10
+    assert hits[0].confidence == "wysoka"
+
+    events = service.poll_events()
+    assert len(events) == 1
+    assert isinstance(events[0], SearchResults)
+    assert events[0].query == "faktura za serwer"
+    assert len(events[0].hits) == 1
+
