@@ -129,6 +129,7 @@ class MainWindow(QMainWindow):
         service: MailService | None = None,
         config_path: Path | None = None,
         speaker: Speaker | None = None,
+        data_dir: Path | None = None,
         beeper: Beeper | None = None,
         voice_dialog: VoiceDialog | None = None,
     ) -> None:
@@ -137,11 +138,8 @@ class MainWindow(QMainWindow):
         self.config_path = config_path or (
             Path(platformdirs.user_config_dir("mailvoice")) / "config.json"
         )
-        self.data_dir = (
-            self.config_path.parent
-            if self.config_path
-            else Path(platformdirs.user_data_dir("mailvoice"))
-        )
+        # katalog DANYCH (baza, certyfikat serwera, urządzenia) — nie katalog konfiguracji
+        self.data_dir = data_dir or Path(platformdirs.user_data_dir("mailvoice"))
         self.device_manager = DeviceManager(self.data_dir / "mailvoice.db")
         self.mobile_server: MobileServer | None = None
         self.mobile_server_error: str = ""

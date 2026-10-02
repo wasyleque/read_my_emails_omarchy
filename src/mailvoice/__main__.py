@@ -10,6 +10,7 @@ from mailvoice import crashlog
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import load_config, save_config
 from mailvoice.core.instance import acquire_instance_lock
+from mailvoice.core.migrate import migrate_server_state
 from mailvoice.core.secrets import KeyringStore, SecretStore, SecretStoreUnavailable
 from mailvoice.core.service import MailService
 from mailvoice.core.store import Store
@@ -53,6 +54,11 @@ def main() -> int:
     if lock is None:
         _report_already_running("--headless" in sys.argv)
         return 1
+    if "--data-dir" not in sys.argv:
+        migrate_server_state(
+            Path(platformdirs.user_config_dir("mailvoice")),
+            Path(platformdirs.user_data_dir("mailvoice")),
+        )
     if "--headless" in sys.argv:
         from mailvoice.headless import run_headless
 
@@ -130,6 +136,7 @@ def _run() -> int:
     window = MainWindow(
         service=service,
         config_path=config_file,
+        data_dir=data_dir,
         speaker=speaker,
         beeper=beeper,
         voice_dialog=dialog,
