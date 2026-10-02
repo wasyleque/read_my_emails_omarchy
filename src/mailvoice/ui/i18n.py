@@ -54,6 +54,15 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "threshold_balanced": "Zrównoważenie (domyślnie)",
         "threshold_strict": "Tylko najważniejsze",
         "step4_vip_label": "Ważni nadawcy (VIP) — zawsze powiadamiaj:",
+        "mobile_pair_need_enable": (
+            "Najpierw zaznacz „Włącz połączenie z telefonem” i kliknij „Zapisz zmiany”."
+        ),
+        "mobile_pair_server_down": (
+            "Połączenie z telefonem jeszcze nie działa, więc telefon nie mógłby się połączyć. "
+            "Kliknij „Zapisz zmiany”, żeby je uruchomić, i spróbuj ponownie.\n\n"
+            "Szczegóły: {detail}"
+        ),
+        "mobile_server_start_failed": "Nie udało się uruchomić połączenia z telefonem. ({detail})",
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -306,6 +315,14 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "threshold_balanced": "Balanced (default)",
         "threshold_strict": "Strict (critical only)",
         "step4_vip_label": "Important senders (VIP) — always notify:",
+        "mobile_pair_need_enable": (
+            "First tick “Enable phone connection” and click “Save changes”."
+        ),
+        "mobile_pair_server_down": (
+            "The phone connection is not running yet, so a phone could not connect. "
+            "Click “Save changes” to start it, then try again.\n\nDetails: {detail}"
+        ),
+        "mobile_server_start_failed": "Could not start the phone connection. ({detail})",
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),

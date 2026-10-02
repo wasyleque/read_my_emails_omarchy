@@ -144,6 +144,7 @@ class MainWindow(QMainWindow):
         )
         self.device_manager = DeviceManager(self.data_dir / "mailvoice.db")
         self.mobile_server: MobileServer | None = None
+        self.mobile_server_error: str = ""
         self.speaker = speaker
         self.beeper = beeper
         self.voice_dialog = voice_dialog
@@ -557,6 +558,7 @@ class MainWindow(QMainWindow):
             on_config_saved=self._on_config_updated,
             device_manager=self.device_manager,
             data_dir=self.data_dir,
+            server_status=self.mobile_server_status,
             parent=self,
         )
         dlg.exec()
@@ -571,6 +573,12 @@ class MainWindow(QMainWindow):
                 self.lbl_status.setText(tr("status_no_accounts"))
             elif self.lbl_status.text() == tr("status_no_accounts"):
                 self.lbl_status.setText(tr("status_ready"))
+
+    def mobile_server_status(self) -> tuple[bool, str]:
+        """(działa?, przyczyna problemu) — dla okna parowania w Ustawieniach."""
+        if self.mobile_server is not None and self.mobile_server.is_running:
+            return True, ""
+        return False, self.mobile_server_error
 
     def _update_mobile_server(self) -> None:
         """Uruchamia, zatrzymuje serwer mobilny oraz aktualizuje wskaźnik w pasku statusu."""
@@ -590,8 +598,13 @@ class MainWindow(QMainWindow):
                 self.service.add_listener(self.mobile_server.broadcast_event)
                 try:
                     self.mobile_server.start()
-                except Exception:
-                    pass
+                    self.mobile_server_error = ""
+                except Exception as exc:  # noqa: BLE001 — przyczyna ma być widoczna, nie połknięta
+                    self.mobile_server_error = f"{type(exc).__name__}: {exc}"
+                    self.mobile_server = None  # pozwala spróbować ponownie po poprawieniu ustawień
+                    self._show_problem(
+                        tr("mobile_server_start_failed", detail=self.mobile_server_error)
+                    )
 
             if self.mobile_server and self.mobile_server.is_running:
                 devices = self.device_manager.list_devices(include_revoked=False)

@@ -148,6 +148,7 @@ class SettingsDialog(QDialog):
         on_config_saved: Callable[[AppConfig], None] | None = None,
         device_manager: DeviceManager | None = None,
         data_dir: Path | None = None,
+        server_status: Callable[[], tuple[bool, str]] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -156,6 +157,7 @@ class SettingsDialog(QDialog):
         self.secret_store = secret_store
         self.speaker = speaker or FakeSpeaker()
         self.on_config_saved = on_config_saved
+        self.server_status = server_status
         self.data_dir = data_dir or (
             self.config_path.parent
             if self.config_path
@@ -655,6 +657,17 @@ class SettingsDialog(QDialog):
         self.btn_revoke_device.setEnabled(dev is not None)
 
     def _on_pair_device(self) -> None:
+        # Kod QR bez działającego serwera to pułapka: telefon zeskanuje go i trafi w pustkę.
+        if not self.cb_server_enabled.isChecked():
+            QMessageBox.information(self, "MailVoice", tr("mobile_pair_need_enable"))
+            return
+        if self.server_status is not None:
+            running, detail = self.server_status()
+            if not running:
+                QMessageBox.warning(
+                    self, "MailVoice", tr("mobile_pair_server_down", detail=detail or "-")
+                )
+                return
         dlg = PairingDialog(
             device_manager=self.device_manager,
             port=self.config.server.port,
