@@ -79,7 +79,7 @@ def test_settings_ollama_tab_detection_and_populate(qapp, tmp_path):
     qapp.processEvents()
 
     # Przełącz na zakładkę Ollama (indeks 3) - uruchamia automatyczne wykrywanie
-    dlg.tabs.setCurrentIndex(3)
+    dlg.tabs.setCurrentWidget(dlg._ollama_page)
     _wait_for_worker(dlg.ollama_detect_worker, qapp)
 
     assert dlg.ollama_detection is not None
@@ -149,7 +149,7 @@ def test_settings_ollama_missing_model_warning_and_save_confirm(qapp, tmp_path, 
     dlg.show()
     qapp.processEvents()
 
-    dlg.tabs.setCurrentIndex(3)
+    dlg.tabs.setCurrentWidget(dlg._ollama_page)
     _wait_for_worker(dlg.ollama_detect_worker, qapp)
 
     # Niezainstalowany model powinien być na liście oznaczony ostrzeżeniem
@@ -235,7 +235,7 @@ def test_settings_ollama_server_not_found(qapp, tmp_path):
     dlg.show()
     qapp.processEvents()
 
-    dlg.tabs.setCurrentIndex(3)
+    dlg.tabs.setCurrentWidget(dlg._ollama_page)
     _wait_for_worker(dlg.ollama_detect_worker, qapp)
 
     assert "Nie znaleziono" in dlg.lbl_detect_status.text()
@@ -327,7 +327,7 @@ def test_settings_ollama_screenshot(qapp, tmp_path):
     dlg.show()
     qapp.processEvents()
 
-    dlg.tabs.setCurrentIndex(3)
+    dlg.tabs.setCurrentWidget(dlg._ollama_page)
     _wait_for_worker(dlg.ollama_detect_worker, qapp)
 
     if os.environ.get("MAILVOICE_UPDATE_SCREENSHOTS") == "1":

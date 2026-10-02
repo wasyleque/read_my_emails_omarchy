@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -182,6 +184,15 @@ class SettingsDialog(QDialog):
         self._init_ui()
         self._load_values()
 
+    @staticmethod
+    def _scrollable(page: QWidget) -> QScrollArea:
+        """Zakładka w obszarze przewijania: przy małej rozdzielczości formularz się przewija."""
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(page)
+        return area
+
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
 
@@ -190,27 +201,32 @@ class SettingsDialog(QDialog):
         # Zakładka 1: Konto pocztowe
         self.tab_account = QWidget()
         self._init_account_tab()
-        self.tabs.addTab(self.tab_account, tr("tab_account"))
+        self.tabs.addTab(self._scrollable(self.tab_account), tr("tab_account"))
 
-        # Zakładka 2: Ocenianie ważności
+        # Zakładki 2-4: Ocenianie ważności podzielone na trzy mniejsze strony
         self.tab_analysis = QWidget()
+        self.tab_people = QWidget()
+        self.tab_rules = QWidget()
         self._init_analysis_tab()
-        self.tabs.addTab(self.tab_analysis, tr("tab_analysis"))
+        self.tabs.addTab(self._scrollable(self.tab_analysis), tr("tab_importance"))
+        self.tabs.addTab(self._scrollable(self.tab_people), tr("tab_people"))
+        self.tabs.addTab(self._scrollable(self.tab_rules), tr("tab_rules"))
 
-        # Zakładka 3: Głos i powiadomienia
+        # Zakładka 5: Głos i powiadomienia
         self.tab_voice = QWidget()
         self._init_voice_tab()
-        self.tabs.addTab(self.tab_voice, tr("tab_notifications"))
+        self.tabs.addTab(self._scrollable(self.tab_voice), tr("tab_notifications"))
 
-        # Zakładka 4: Ollama
+        # Zakładka 6: Ollama
         self.tab_ollama = QWidget()
         self._init_ollama_tab()
-        self.tabs.addTab(self.tab_ollama, tr("tab_ollama"))
+        self._ollama_page = self._scrollable(self.tab_ollama)
+        self.tabs.addTab(self._ollama_page, tr("tab_ollama"))
 
-        # Zakładka 5: Telefon (Android)
+        # Zakładka 7: Telefon (Android)
         self.tab_mobile = QWidget()
         self._init_mobile_tab()
-        self.tabs.addTab(self.tab_mobile, tr("tab_mobile"))
+        self.tabs.addTab(self._scrollable(self.tab_mobile), tr("tab_mobile"))
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -355,6 +371,8 @@ class SettingsDialog(QDialog):
 
     def _init_analysis_tab(self) -> None:
         layout = QVBoxLayout(self.tab_analysis)
+        people_layout = QVBoxLayout(self.tab_people)
+        rules_layout = QVBoxLayout(self.tab_rules)
 
         # Szablony
         tmpl_layout = QHBoxLayout()
@@ -381,8 +399,6 @@ class SettingsDialog(QDialog):
         self.slider.setRange(1, 10)
         layout.addWidget(self.slider)
 
-        lists_layout = QHBoxLayout()
-
         # VIP
         vip_box = QVBoxLayout()
         vip_box.addWidget(QLabel(tr("step4_vip_label")))
@@ -404,7 +420,7 @@ class SettingsDialog(QDialog):
         btn_del_vip = QPushButton(tr("remove_btn"))
         btn_del_vip.clicked.connect(lambda: self._remove_selected(self.list_vip))
         vip_box.addWidget(btn_del_vip)
-        lists_layout.addLayout(vip_box)
+        people_layout.addLayout(vip_box)
 
         # Słowa
         kw_box = QVBoxLayout()
@@ -423,21 +439,19 @@ class SettingsDialog(QDialog):
         btn_del_kw = QPushButton(tr("remove_btn"))
         btn_del_kw.clicked.connect(lambda: self._remove_selected(self.list_kw))
         kw_box.addWidget(btn_del_kw)
-        lists_layout.addLayout(kw_box)
-
-        layout.addLayout(lists_layout)
+        rules_layout.addLayout(kw_box)
 
         # Osoby, do których piszesz (automatycznie z folderu Wysłane)
-        layout.addWidget(QLabel(tr("auto_vip_label")))
+        people_layout.addWidget(QLabel(tr("auto_vip_label")))
         self.cb_auto_vip = QComboBox()
         self.cb_auto_vip.addItem(tr("auto_vip_off"), "off")
         self.cb_auto_vip.addItem(tr("auto_vip_bonus"), "bonus")
         self.cb_auto_vip.addItem(tr("auto_vip_vip"), "vip")
-        layout.addWidget(self.cb_auto_vip)
+        people_layout.addWidget(self.cb_auto_vip)
         lbl_auto_hint = QLabel(tr("auto_vip_hint"))
         lbl_auto_hint.setWordWrap(True)
         lbl_auto_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
-        layout.addWidget(lbl_auto_hint)
+        people_layout.addWidget(lbl_auto_hint)
         known_row = QHBoxLayout()
         self.lbl_known_people = QLabel("")
         known_row.addWidget(self.lbl_known_people)
@@ -445,12 +459,12 @@ class SettingsDialog(QDialog):
         btn_show_known.clicked.connect(self._show_known_people)
         known_row.addWidget(btn_show_known)
         known_row.addStretch()
-        layout.addLayout(known_row)
+        people_layout.addLayout(known_row)
         self._refresh_known_people()
 
         # Ignorowane maile: reguły (nadawca / domena / temat); stara lista blokowanych nadawców
         # jest tu pokazywana jako reguły „od: …” i po zapisie przechodzi do ignore_rules.
-        layout.addWidget(QLabel(tr("ignore_section_label")))
+        rules_layout.addWidget(QLabel(tr("ignore_section_label")))
         ignore_in = QHBoxLayout()
         self.txt_ignore_sender = QLineEdit()
         self.txt_ignore_sender.setPlaceholderText(tr("ignore_sender_ph"))
@@ -461,17 +475,17 @@ class SettingsDialog(QDialog):
         ignore_in.addWidget(self.txt_ignore_sender)
         ignore_in.addWidget(self.txt_ignore_subject)
         ignore_in.addWidget(btn_add_ignore)
-        layout.addLayout(ignore_in)
+        rules_layout.addLayout(ignore_in)
         self.list_ignore = QListWidget()
         self.list_ignore.setMaximumHeight(90)
-        layout.addWidget(self.list_ignore)
+        rules_layout.addWidget(self.list_ignore)
         btn_del_ignore = QPushButton(tr("remove_btn"))
         btn_del_ignore.clicked.connect(lambda: self._remove_selected(self.list_ignore))
-        layout.addWidget(btn_del_ignore)
+        rules_layout.addWidget(btn_del_ignore)
         lbl_ignore_hint = QLabel(tr("ignore_hint"))
         lbl_ignore_hint.setWordWrap(True)
         lbl_ignore_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
-        layout.addWidget(lbl_ignore_hint)
+        rules_layout.addWidget(lbl_ignore_hint)
 
         # Okres podsumowania tematów (dni)
         layout.addWidget(QLabel(tr("settings_digest_days_label")))
@@ -479,6 +493,9 @@ class SettingsDialog(QDialog):
         self.spin_digest_days.setRange(1, 365)
         self.spin_digest_days.setValue(self.config.digest_days)
         layout.addWidget(self.spin_digest_days)
+        layout.addStretch()
+        people_layout.addStretch()
+        rules_layout.addStretch()
 
     def _add_ignore_rule(self) -> None:
         rule = IgnoreRule(
@@ -582,7 +599,7 @@ class SettingsDialog(QDialog):
 
     def _on_tab_changed(self, index: int) -> None:
         # Zakładka 4 (index 3) to Model AI (Ollama)
-        if index == 3 and not self._ollama_detected_once:
+        if self.tabs.widget(index) is self._ollama_page and not self._ollama_detected_once:
             self._on_detect_models()
 
     def _init_ollama_tab(self) -> None:
@@ -1539,7 +1556,7 @@ class SettingsDialog(QDialog):
                     QMessageBox.StandardButton.No,
                 )
                 if ans != QMessageBox.StandardButton.Yes:
-                    self.tabs.setCurrentIndex(3)
+                    self.tabs.setCurrentWidget(self._ollama_page)
                     return
 
         prefer = (

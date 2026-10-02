@@ -62,8 +62,9 @@ def test_settings_dialog_mobile_tab_and_save(qapp, tmp_path: Path, monkeypatch):
     )
 
     # 1. Sprawdzenie liczby i tytułu zakładki
-    assert dlg.tabs.count() == 5
-    assert "Telefon" in dlg.tabs.tabText(4)
+    titles = [dlg.tabs.tabText(i) for i in range(dlg.tabs.count())]
+    assert any("Telefon" in title for title in titles)
+    assert dlg.tabs.count() >= 5  # zakładka telefonu istnieje niezależnie od układu pozostałych
 
     # 2. Stan początkowy przełącznika (wyłączony)
     assert not dlg.cb_server_enabled.isChecked()

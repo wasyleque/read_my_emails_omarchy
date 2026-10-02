@@ -104,6 +104,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "btn_read_digest": "Czytaj podsumowanie",
         "digest_more": "… i {count} więcej (odśwież lub zawęź okres, aby zobaczyć mniej)",
+        "tab_importance": "Ważność",
+        "tab_people": "Ludzie (VIP)",
+        "tab_rules": "Słowa i ignorowanie",
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -405,6 +408,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "btn_read_digest": "Read summary aloud",
         "digest_more": "… and {count} more (refresh or narrow the period to see fewer)",
+        "tab_importance": "Importance",
+        "tab_people": "People (VIP)",
+        "tab_rules": "Words and ignoring",
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),
