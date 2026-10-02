@@ -122,9 +122,12 @@ async def test_server_digest_returns_open_matters_with_counts_and_does_not_emit(
         everything = await (await client.get("/v1/digest?days=30&all=1", headers=headers)).json()
         assert everything["shown"] == 13
         limited = await (
-            await client.get("/v1/digest?days=30&all=1&limit=5", headers=headers)
+            await client.get("/v1/digest?days=30&all=1&limit=2", headers=headers)
         ).json()
-        assert limited["shown"] == 5
+        # limit liczy się w każdej grupie osobno: 2 (mnie) + 1 (innych) + 2 (zamknięte) + 2 (info)
+        assert limited["shown"] == 7
+        by_status = [t["status"] for t in limited["topics"]]
+        assert by_status.count("oczekuje_na_innych") == 1  # mała grupa nie jest wypychana
         assert len(service.calls) == 1  # kolejne zapytania z pamięci podręcznej (bez liczenia)
     finally:
         await client.close()
@@ -157,3 +160,37 @@ def test_phone_digest_path_uses_a_short_per_call_timeout(tmp_path, monkeypatch):
     assert seen == {"timeout": 6.0, "budget": 3}
     svc.request_digest(days=30)  # zwykłe wywołanie (okno na komputerze) zachowuje długi limit
     assert seen["timeout"] == 120.0
+
+
+@pytest.mark.anyio
+async def test_server_digest_limit_does_not_push_out_the_waiting_for_others_group(tmp_path):
+    """Regresja z telefonu: 134 spraw „czeka na mnie” zajmowało cały limit i grupa „czeka na
+    innych” miała licznik 36, ale pustą listę."""
+
+    class _Big:
+        def request_digest(self, days=None, **kwargs):
+            topics = [_topic(f"M{i}", "oczekuje_na_mnie") for i in range(30)]
+            topics += [_topic(f"I{i}", "oczekuje_na_innych") for i in range(6)]
+            return Digest(period="p", topics=topics)
+
+    ctx = ServerContext(
+        config=AppConfig(),
+        store=Store(tmp_path / "s.db"),
+        device_manager=DeviceManager(tmp_path / "d.db"),
+        service=_Big(),
+    )
+    _, token = ctx.device_manager.pair_device(ctx.device_manager.start_pairing_session().code, "T")
+    client = TestClient(TestServer(create_app(ctx)))
+    await client.start_server()
+    try:
+        data = await (
+            await client.get(
+                "/v1/digest?days=30&limit=10", headers={"Authorization": f"Bearer {token}"}
+            )
+        ).json()
+        statuses = [t["status"] for t in data["topics"]]
+        assert statuses.count("oczekuje_na_mnie") == 10  # limit na grupę
+        assert statuses.count("oczekuje_na_innych") == 6  # licznik 6 = 6 pozycji na liście
+        assert data["counts"]["oczekuje_na_innych"] == 6
+    finally:
+        await client.close()

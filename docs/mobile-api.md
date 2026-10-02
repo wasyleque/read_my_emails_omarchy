@@ -192,6 +192,8 @@ Oznacza wiadomość lokalnie w bazie jako odsłuchaną/potwierdzoną przez użyt
 
 Zwraca zagregowane podsumowanie tematów i wątków z ostatnich N dni.
 
+Parametry opcjonalne: `limit` (1–200, domyślnie 60) — maksymalna liczba tematów **w każdej grupie statusu osobno** (mała grupa „oczekuje_na_innych” nie jest wypychana przez dużą „oczekuje_na_mnie”); `all=1` — dołącza też tematy „zamknięte” i „informacyjne” (domyślnie tylko ich liczby w `counts`).
+
 **Response 200 OK**:
 ```json
 {

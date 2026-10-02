@@ -409,8 +409,10 @@ def _compute_digest(ctx: ServerContext, days: int):
 async def handle_digest(request: web.Request) -> web.Response:
     """GET /v1/digest?days=&limit=&all= - Podsumowanie tematów (domyślnie tylko sprawy otwarte).
 
-    Zwraca najwyżej `limit` tematów (domyślnie 60). Bez `all=1` pomija tematy „zamknięte” i
-    „informacyjne” — jest ich zwykle najwięcej — ale podaje ich liczbę w `counts`.
+    Zwraca najwyżej `limit` tematów (domyślnie 60) w KAŻDEJ grupie statusu osobno — inaczej
+    wiele spraw „czeka na mnie” wypychałoby z odpowiedzi całą grupę „czeka na innych”.
+    Bez `all=1` pomija tematy „zamknięte” i „informacyjne” (zwykle najliczniejsze),
+    ale podaje ich liczbę w `counts`.
     """
     ctx: ServerContext = request.app[CONTEXT_KEY]
     try:
@@ -437,7 +439,14 @@ async def handle_digest(request: web.Request) -> web.Response:
     counts: dict[str, int] = {}
     for t in digest.topics:
         counts[t.status] = counts.get(t.status, 0) + 1
-    chosen = [t for t in digest.topics if include_all or t.status in _ACTIONABLE][:limit]
+    chosen: list = []
+    per_status: dict[str, int] = {}
+    for t in digest.topics:  # kolejność z serwera (VIP, ważność, świeżość) zostaje w obrębie grupy
+        if not (include_all or t.status in _ACTIONABLE):
+            continue
+        if per_status.get(t.status, 0) < limit:
+            per_status[t.status] = per_status.get(t.status, 0) + 1
+            chosen.append(t)
 
     topics_data = [
         {

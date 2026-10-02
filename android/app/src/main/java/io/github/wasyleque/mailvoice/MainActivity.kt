@@ -50,6 +50,8 @@ import io.github.wasyleque.mailvoice.ui.ConnectingScreen
 import io.github.wasyleque.mailvoice.ui.DigestScreen
 import io.github.wasyleque.mailvoice.ui.DigestViewModel
 import io.github.wasyleque.mailvoice.ui.IgnoreMailDialog
+import io.github.wasyleque.mailvoice.ui.MailRuleDialog
+import io.github.wasyleque.mailvoice.ui.RuleDialogKind
 import io.github.wasyleque.mailvoice.ui.MailDetailScreen
 import io.github.wasyleque.mailvoice.ui.MailsListScreen
 import io.github.wasyleque.mailvoice.ui.MailsViewModel
@@ -376,6 +378,7 @@ fun PairedAppMain(
                             onRefresh = { mailsViewModel.loadMails() },
                             onMailClicked = { mail -> mailsViewModel.selectMail(mail) },
                             onStartVoiceSession = { mailsViewModel.startVoiceSession() },
+                            onVipClicked = { mail -> mailsViewModel.openVipDialog(mail) },
                             onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) },
                             onDismissRefreshError = { mailsViewModel.dismissRefreshError() }
                         )
@@ -462,6 +465,18 @@ fun PairedAppMain(
                     Text(stringResource(R.string.btn_cancel))
                 }
             }
+        )
+    }
+
+    // Dialog oznaczania VIP (lustro ignorowania)
+    if (vipTarget != null) {
+        MailRuleDialog(
+            kind = RuleDialogKind.VIP,
+            mail = vipTarget!!,
+            isSubmitting = isMarkingVip,
+            errorMessage = vipError,
+            onDismiss = { mailsViewModel.dismissVipDialog() },
+            onConfirm = { mode -> mailsViewModel.confirmVip(mode) }
         )
     }
 
