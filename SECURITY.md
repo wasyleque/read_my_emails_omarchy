@@ -41,6 +41,27 @@ oraz wywoływać komendy głosowe (tekst mówiony przez TTS nie może stać się
 - Wiadomość o wysokim ryzyku: oznaczenie „⚠ Podejrzany”, głos: „Uwaga, ta wiadomość wygląda na podejrzaną” bez czytania
   jej treści i linków; nie podnosi ważności; powody widoczne w prosty sposób.
 
+## Zewnętrzni dostawcy AI i wykrywanie serwera w sieci (opcjonalne, WYŁĄCZONE domyślnie)
+Domyślnie treść maili trafia **wyłącznie** do lokalnego/LAN-owego Ollamy. Użytkownik może świadomie włączyć dostawcę
+zewnętrznego (np. OpenAI, Anthropic, usługi zgodne z OpenAI API). Wtedy **dane opuszczają komputer** — obowiązują zasady:
+1. **Świadoma zgoda:** osobny ekran po ludzku („Treść Twoich maili będzie wysyłana do firmy X. Może zawierać dane
+   osobiste i poufne.”), zgoda zapisana per dostawca, możliwość cofnięcia; bez zgody żadne żądanie nie wychodzi.
+2. **Minimalizacja danych:** do dostawcy zewnętrznego idzie tylko to, co konieczne (nadawca, temat, ucięty fragment
+   treści już po usunięciu ukrytego tekstu, bez załączników, bez linków/URL-i, bez nagłówków uwierzytelniających);
+   opcja „tylko metadane” (bez treści). Nigdy pełne treści, nigdy hasła, nigdy zawartość indeksu.
+3. **Tylko HTTPS** i weryfikacja certyfikatu; klucz API wyłącznie w sejfie (`SecretStore`), nigdy w configu/logach.
+4. **Maile podejrzane (ryzyko wysokie) i oznaczone jako wrażliwe nie idą do dostawcy zewnętrznego** — tylko lokalnie
+   albo wcale. Konta i VIP można oznaczyć jako „tylko lokalnie”.
+5. **Przejrzystość:** w UI zawsze widać, który dostawca analizuje (ikona „🌐 zewnętrzny” vs „🏠 lokalny”), licznik
+   wysłanych żądań, a przy błędzie/limicie czytelny komunikat; failover z zewnętrznego na lokalny dozwolony, odwrotnie
+   NIE (nigdy cicho nie „awansuj” maila do chmury).
+6. **Brak ukrytych połączeń:** lista dozwolonych hostów sieciowych jest jawna w kodzie i pilnowana testem statycznym.
+
+**Wykrywanie Ollamy w sieci** — wyłącznie na żądanie użytkownika (przycisk), nigdy w tle: skanuje tylko adresy
+prywatne (RFC1918/link-local, własna podsieć /24 i znane hosty), tylko port Ollamy, krótkie timeouty, ograniczona
+liczba równoległych połączeń, potwierdzenie rozpoznania odpowiedzią `/api/tags`. Nigdy nie skanuje adresów publicznych.
+Użytkownik musi potwierdzić znaleziony serwer przed zapisaniem; ostrzeż, że Ollama w LAN zwykle nie ma uwierzytelniania.
+
 ## Zgłaszanie luk
 Zgłoś prywatnie przez GitHub Security Advisories (zakładka Security repozytorium). Nie umieszczaj w publicznych issues
 prawdziwych maili ani danych.
