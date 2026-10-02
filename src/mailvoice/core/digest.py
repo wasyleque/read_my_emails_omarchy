@@ -188,6 +188,7 @@ def _vip_rules(store: Store, config: AppConfig):
     addresses, domains = store.get_correspondents(exclude=mine)
     return Rules(
         vip_senders=tuple(config.vip_senders),
+        vip_rules=tuple(config.vip_rules),
         known_addresses=addresses,
         known_domains=domains,
         auto_vip=config.auto_vip,

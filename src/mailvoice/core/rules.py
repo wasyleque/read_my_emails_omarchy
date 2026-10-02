@@ -72,6 +72,7 @@ class MailInfo:
 @dataclass(frozen=True)
 class Rules:
     vip_senders: Tuple[str, ...] = ()
+    vip_rules: Tuple[IgnoreRule, ...] = ()  # VIP z tematem (przycisk „VIP…”)
     keywords: Tuple[str, ...] = ()
     blocked_senders: Tuple[str, ...] = ()
     ignore_rules: Tuple[IgnoreRule, ...] = ()
@@ -106,7 +107,9 @@ def evaluate(mail: MailInfo, rules: Rules) -> RuleResult:
 
     # Rule 2: VIP (ręczna lista) albo znany korespondent (automatycznie z folderu Wysłane)
     force_important = False
-    if any(v.lower() in mail.sender.lower() for v in rules.vip_senders):
+    if any(v.lower() in mail.sender.lower() for v in rules.vip_senders) or any(
+        rule.matches(mail.sender, mail.subject) for rule in rules.vip_rules
+    ):
         score_bonus += 3
         force_important = True
         reasons.append("vip_sender")

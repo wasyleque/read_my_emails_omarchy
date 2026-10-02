@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, ServerConfig, save_config
 from mailvoice.core.devices import DeviceManager
-from mailvoice.core.ignore import IgnoreRule
+from mailvoice.core.ignore import IgnoreRule, MailRule
 from mailvoice.core.ollama_models import (
     CheckResult,
     Detection,
@@ -408,14 +408,17 @@ class SettingsDialog(QDialog):
         vip_box.addWidget(lbl_vip_hint)
         vip_in = QHBoxLayout()
         self.txt_vip = QLineEdit()
+        self.txt_vip_subject = QLineEdit()
+        self.txt_vip_subject.setPlaceholderText(tr("vip_subject_ph"))
         btn_add_vip = QPushButton(tr("add_btn"))
         btn_add_vip.clicked.connect(self._add_vip)
         vip_in.addWidget(self.txt_vip)
+        vip_in.addWidget(self.txt_vip_subject)
         vip_in.addWidget(btn_add_vip)
         vip_box.addLayout(vip_in)
 
         self.list_vip = QListWidget()
-        self.list_vip.setMaximumHeight(80)
+        self.list_vip.setMaximumHeight(110)
         vip_box.addWidget(self.list_vip)
         btn_del_vip = QPushButton(tr("remove_btn"))
         btn_del_vip.clicked.connect(lambda: self._remove_selected(self.list_vip))
@@ -876,8 +879,11 @@ class SettingsDialog(QDialog):
         # Reguły
         self.txt_desc.setText(self.config.analysis_prompt)
         self.slider.setValue(self.config.importance_threshold)
+        self.list_vip.clear()
         for vip in self.config.vip_senders:
-            self.list_vip.addItem(vip)
+            self._append_vip_item(MailRule(sender=vip))
+        for vip_rule in self.config.vip_rules:
+            self._append_vip_item(vip_rule)
         for kw in self.config.keywords:
             self.list_kw.addItem(kw)
         self.spin_digest_days.setValue(self.config.digest_days)
@@ -1213,10 +1219,30 @@ class SettingsDialog(QDialog):
             self.txt_details.setVisible(False)
 
     def _add_vip(self) -> None:
-        text = self.txt_vip.text().strip()
-        if text:
-            self.list_vip.addItem(QListWidgetItem(text))
+        rule = MailRule(
+            sender=self.txt_vip.text().strip(), subject=self.txt_vip_subject.text().strip()
+        )
+        if rule.is_valid():
+            self._append_vip_item(rule)
             self.txt_vip.clear()
+            self.txt_vip_subject.clear()
+
+    def _append_vip_item(self, rule: MailRule) -> None:
+        for i in range(self.list_vip.count()):
+            if self.list_vip.item(i).data(Qt.ItemDataRole.UserRole) == rule:
+                return
+        # sam nadawca wygląda jak dawniej (bez „od:”), reguła z tematem pokazuje oba warunki
+        item = QListWidgetItem(rule.sender if not rule.subject else rule.describe())
+        item.setData(Qt.ItemDataRole.UserRole, rule)
+        self.list_vip.addItem(item)
+
+    def _collect_vip_rules(self) -> list[MailRule]:
+        rules = []
+        for i in range(self.list_vip.count()):
+            rule = self.list_vip.item(i).data(Qt.ItemDataRole.UserRole)
+            if isinstance(rule, MailRule) and rule not in rules:
+                rules.append(rule)
+        return rules
 
     def _add_kw(self) -> None:
         text = self.txt_kw.text().strip()
@@ -1530,7 +1556,10 @@ class SettingsDialog(QDialog):
                 )
             )
 
-        vip_senders = [self.list_vip.item(i).text() for i in range(self.list_vip.count())]
+        vip_all = self._collect_vip_rules()
+        # sam nadawca zostaje w vip_senders (stary format), reguły z tematem idą do vip_rules
+        vip_senders = [r.sender for r in vip_all if not r.subject]
+        vip_rules = [r for r in vip_all if r.subject]
         keywords = [self.list_kw.item(i).text() for i in range(self.list_kw.count())]
 
         # Walidacja i konfiguracja Ollama
@@ -1585,6 +1614,7 @@ class SettingsDialog(QDialog):
             accounts=new_accounts,
             analysis_prompt=self.txt_desc.toPlainText().strip(),
             vip_senders=vip_senders,
+            vip_rules=vip_rules,
             keywords=keywords,
             blocked_senders=[],  # przeniesione do ignore_rules (to samo działanie)
             ignore_rules=self._collect_ignore_rules(),

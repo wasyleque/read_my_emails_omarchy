@@ -406,4 +406,74 @@ class MailsViewModelTest {
         assertFalse(viewModel.isIgnoring.value)
         assertTrue(viewModel.isUnauthorized.value)
     }
+
+    @Test
+    fun testLoadMailsEmptyListProducesEmptyStateNotError() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue("Pusta lista z kodem 200 musi dawać stan Empty, a NIE Error", viewModel.uiState.value is MailsUiState.Empty)
+        assertEquals(0, viewModel.mails.value.size)
+        assertFalse(viewModel.isLoading.value)
+    }
+
+    @Test
+    fun testLoadMailsErrorProducesErrorState() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("Server Error"))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is MailsUiState.Error)
+        val errorState = viewModel.uiState.value as MailsUiState.Error
+        assertTrue(errorState.canRetry)
+        assertTrue(errorState.message.contains("Błąd serwera na komputerze"))
+    }
+
+    @Test
+    fun testRefreshFailurePreservesOldMails() = runTest(testDispatcher) {
+        // Pierwsze udane ładowanie
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "mails": [
+                    {
+                      "id": "m1",
+                      "sender": "Jan",
+                      "subject": "T1",
+                      "importance": 5,
+                      "why": "P",
+                      "summary": "S",
+                      "suspicious": false,
+                      "date": "d",
+                      "acknowledged": false
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is MailsUiState.Content)
+        assertEquals(1, (viewModel.uiState.value as MailsUiState.Content).mails.size)
+
+        // Drugie nieudane ładowanie (odświeżenie)
+        server.enqueue(MockResponse().setResponseCode(500).setBody("Server Error"))
+        viewModel.loadMails()
+        advanceUntilIdle()
+
+        // Stan musi pozostać Content z zachowaną starą listą i ustawionym refreshError
+        assertTrue(viewModel.uiState.value is MailsUiState.Content)
+        val contentState = viewModel.uiState.value as MailsUiState.Content
+        assertEquals(1, contentState.mails.size)
+        assertEquals("m1", contentState.mails[0].id)
+        assertNotNull(contentState.refreshError)
+        assertTrue(contentState.refreshError!!.contains("Błąd serwera na komputerze"))
+
+        viewModel.dismissRefreshError()
+        assertNull((viewModel.uiState.value as MailsUiState.Content).refreshError)
+    }
 }

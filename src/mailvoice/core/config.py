@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
-from mailvoice.core.ignore import MAX_RULES, IgnoreRule
+from mailvoice.core.ignore import MAX_RULES, IgnoreRule, MailRule
 
 
 @dataclass
@@ -43,6 +43,7 @@ class AppConfig:
     keywords: List[str] = field(default_factory=list)
     blocked_senders: List[str] = field(default_factory=list)
     ignore_rules: List[IgnoreRule] = field(default_factory=list)  # nadawca/temat do ignorowania
+    vip_rules: List[MailRule] = field(default_factory=list)  # nadawca/temat zawsze ważny (VIP)
     interval_minutes: int = 10
     notify_mode: str = "beep"  # 'beep' or 'ask'
     auto_vip: str = "bonus"  # osoby z Wysłanych: off | bonus | vip
@@ -66,7 +67,7 @@ class AppConfig:
                 result[key] = [account.__dict__ for account in value]
             elif key in ("ollama", "server"):
                 result[key] = value.__dict__
-            elif key == "ignore_rules":
+            elif key in ("ignore_rules", "vip_rules"):
                 result[key] = [{"sender": r.sender, "subject": r.subject} for r in value]
             else:
                 result[key] = value
@@ -148,6 +149,7 @@ class AppConfig:
             keywords=d.get("keywords", []),
             blocked_senders=d.get("blocked_senders", []),
             ignore_rules=_parse_ignore_rules(d.get("ignore_rules", [])),
+            vip_rules=_parse_ignore_rules(d.get("vip_rules", [])),
             interval_minutes=interval_minutes,
             notify_mode=notify_mode,
             voice_output=voice_output,

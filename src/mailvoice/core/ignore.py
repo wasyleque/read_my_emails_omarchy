@@ -39,8 +39,11 @@ def subject_signature(subject: str, words: int = 3) -> str:
 
 
 @dataclass(frozen=True)
-class IgnoreRule:
-    """Pusty `sender` = każdy nadawca, pusty `subject` = każdy temat (nie oba naraz)."""
+class MailRule:
+    """Reguła na maile: nadawca i/lub temat. Służy do ignorowania i do VIP (lustrzane odbicie).
+
+    Pusty `sender` = każdy nadawca, pusty `subject` = każdy temat (nie oba naraz).
+    """
 
     sender: str = ""
     subject: str = ""
@@ -71,24 +74,27 @@ class IgnoreRule:
         return ", ".join(parts)
 
 
-def rule_for_mail(mode: str, sender: str, subject: str) -> IgnoreRule:
+IgnoreRule = MailRule  # zgodność wsteczna: stara nazwa
+
+
+def rule_for_mail(mode: str, sender: str, subject: str) -> MailRule:
     """Buduje regułę z maila, na którym użytkownik kliknął „Ignoruj”."""
     address = parseaddr(sender or "")[1].lower() or (sender or "").strip().lower()
     if mode == "domain":
         domain = address.rsplit("@", 1)[-1] if "@" in address else address
-        return IgnoreRule(sender=f"@{domain}")
+        return MailRule(sender=f"@{domain}")
     if mode == "similar":
         signature = subject_signature(subject)
         if signature:
-            return IgnoreRule(sender=address, subject=signature)
-    return IgnoreRule(sender=address)  # tryb „sender” oraz awaryjnie, gdy temat nie ma słów
+            return MailRule(sender=address, subject=signature)
+    return MailRule(sender=address)  # tryb „sender” oraz awaryjnie, gdy temat nie ma słów
 
 
 def is_ignored(rules, sender: str, subject: str) -> bool:
     return any(rule.matches(sender, subject) for rule in rules)
 
 
-def with_rule(rules: list[IgnoreRule], rule: IgnoreRule) -> list[IgnoreRule]:
+def with_rule(rules: list[MailRule], rule: MailRule) -> list[MailRule]:
     """Lista reguł z dodaną nową (bez duplikatów, z limitem)."""
     if not rule.is_valid() or rule in rules:
         return list(rules)
@@ -105,3 +111,12 @@ def is_ignored_by_config(config, sender: str, subject: str) -> bool:
         return True
     low = (sender or "").lower()
     return any(b and b.lower() in low for b in config.blocked_senders)
+
+
+def add_vip_rule(config, rule: MailRule):
+    """Dodaje regułę VIP (przycisk „VIP…”); identyczna reguła ignorowania zostaje usunięta."""
+    return replace(
+        config,
+        vip_rules=with_rule(list(config.vip_rules), rule),
+        ignore_rules=[r for r in config.ignore_rules if r != rule],
+    )

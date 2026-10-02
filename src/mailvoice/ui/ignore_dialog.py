@@ -1,4 +1,4 @@
-"""Okno „Ignoruj”: wybór, jakie maile zignorować (podobne / od nadawcy / z domeny)."""
+"""Okno „Ignoruj” / „VIP”: wybór, których maili dotyczy reguła (podobne / nadawca / domena)."""
 
 from __future__ import annotations
 
@@ -20,17 +20,20 @@ from mailvoice.ui.i18n import tr
 class IgnoreDialog(QDialog):
     """Pokazuje trzy tryby i podgląd reguły, którą aplikacja zapamięta."""
 
-    def __init__(self, sender: str, subject: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, sender: str, subject: str, parent: QWidget | None = None, kind: str = "ignore"
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("ignore_title"))
+        self._kind = kind  # "ignore" albo "vip": ten sam wybór trybów, inne teksty
+        self.setWindowTitle(tr(f"{kind}_title"))
         self._sender, self._subject = sender, subject
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(tr("ignore_question")))
+        layout.addWidget(QLabel(tr(f"{self._kind}_question")))
 
         self._group = QButtonGroup(self)
         self._buttons: dict[str, QRadioButton] = {}
         for mode in IGNORE_MODES:
-            button = QRadioButton(tr(f"ignore_mode_{mode}"))
+            button = QRadioButton(tr(f"{self._kind}_mode_{mode}"))
             self._group.addButton(button)
             self._buttons[mode] = button
             layout.addWidget(button)
@@ -41,12 +44,12 @@ class IgnoreDialog(QDialog):
         self._preview.setWordWrap(True)
         self._preview.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         layout.addWidget(self._preview)
-        layout.addWidget(QLabel(tr("ignore_undo_hint")))
+        layout.addWidget(QLabel(tr(f"{self._kind}_undo_hint")))
 
         box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("ignore_confirm"))
+        box.button(QDialogButtonBox.StandardButton.Ok).setText(tr(f"{self._kind}_confirm"))
         box.accepted.connect(self.accept)
         box.rejected.connect(self.reject)
         layout.addWidget(box)

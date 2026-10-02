@@ -41,6 +41,11 @@ Przy mailu na liście ważnych kliknij **„Ignoruj…”** (na komputerze lub w
 maile od tego nadawcy, wszystkie od nadawcy albo cała domena. Możesz też dodać reguły ręcznie w Ustawieniach →
 Ocenianie ważności („Ignorowane maile”). Ignorowanie ma pierwszeństwo przed VIP, a regułę można w każdej chwili usunąć.
 
+## Jak oznaczyć nadawcę jako VIP jednym kliknięciem?
+Przy mailu na liście ważnych kliknij **„VIP…”** i wybierz: podobne maile od tego nadawcy, wszystkie od nadawcy albo
+cała domena. Takie maile zawsze powiadamiają, a wątki z VIP-em stoją na początku podsumowania tematów. To lustrzane
+odbicie przycisku „Ignoruj…”. Regułę usuniesz w Ustawieniach → Ludzie (VIP).
+
 ## Czy w VIP mogę wpisać samą domenę?
 Tak. Możesz wpisać cały adres albo samą domenę, np. `@firma.pl`.
 
@@ -99,6 +104,11 @@ re-scored).
 Click **“Ignore…”** next to a mail in the important list (on the computer or in the phone app) and choose: similar
 mail from this sender, all mail from the sender, or the whole domain. You can also add rules by hand in Settings →
 Importance rules (“Ignored mail”). Ignoring takes priority over VIP, and a rule can be removed at any time.
+
+## How do I mark a sender as VIP with one click?
+Click **“VIP…”** next to a mail in the important list and choose: similar mail from this sender, all mail from the
+sender, or the whole domain. Such mail always notifies, and threads with a VIP come first in the topic summary. It
+mirrors the “Ignore…” button. Remove the rule in Settings → People (VIP).
 
 ## Can I put just a domain in VIP?
 Yes. Enter a full address or just a domain, e.g. `@company.com`.

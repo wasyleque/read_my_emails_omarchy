@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -119,5 +120,114 @@ class DigestViewModelTest {
         server.takeRequest() // first req
         val req2 = server.takeRequest() // second req
         assertTrue(req2.path!!.contains("days=7"))
+    }
+
+    @Test
+    fun testLoadDigestEmptyProducesEmptyStateNotError() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"period":"30 dni","topics":[]}"""))
+        val viewModel = DigestViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue("Pusta lista tematów musi dawać stan Empty, a NIE Error", viewModel.uiState.value is DigestUiState.Empty)
+        assertFalse(viewModel.isLoading.value)
+    }
+
+    @Test
+    fun testLoadDigestErrorProducesErrorState() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("Server Error"))
+        val viewModel = DigestViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is DigestUiState.Error)
+        val errorState = viewModel.uiState.value as DigestUiState.Error
+        assertTrue(errorState.canRetry)
+        assertTrue(errorState.message.contains("Błąd serwera na komputerze"))
+    }
+
+    @Test
+    fun testRefreshFailurePreservesOldDigest() = runTest(testDispatcher) {
+        // Pierwsze udane ładowanie
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "period": "ostatnie 30 dni",
+                  "topics": [
+                    {
+                      "title": "Projekt Alfa",
+                      "status": "oczekuje_na_mnie",
+                      "why": "Podpisanie umowy",
+                      "importance": 9,
+                      "mail_count": 4,
+                      "last_activity": "2026-10-02T12:00:00Z",
+                      "who_to_whom": ["Klient -> Ty"]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val viewModel = DigestViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is DigestUiState.Content)
+        server.takeRequest()
+
+        // Drugie nieudane ładowanie (odświeżenie)
+        server.enqueue(MockResponse().setResponseCode(500).setBody("Server Error"))
+        viewModel.loadDigest()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is DigestUiState.Content)
+        val contentState = viewModel.uiState.value as DigestUiState.Content
+        assertEquals(1, contentState.digest.topics.size)
+        assertEquals("Projekt Alfa", contentState.digest.topics[0].title)
+        assertNotNull(contentState.refreshError)
+        assertTrue(contentState.refreshError!!.contains("Błąd serwera na komputerze"))
+
+        viewModel.dismissError()
+        assertNull((viewModel.uiState.value as DigestUiState.Content).refreshError)
+    }
+
+    @Test
+    fun testSetShowAllRequestsAll1AndLimit100() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"period":"30 dni","topics":[]}"""))
+        val viewModel = DigestViewModel(mailApi)
+        advanceUntilIdle()
+        server.takeRequest()
+
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "period": "ostatnie 30 dni",
+                  "topics": [
+                    {
+                      "title": "Zamknięta sprawa",
+                      "status": "zamknięte",
+                      "why": "Zrobione",
+                      "importance": 2,
+                      "mail_count": 1,
+                      "last_activity": "2026-10-02T10:00:00Z",
+                      "who_to_whom": []
+                    }
+                  ],
+                  "counts": {"zamknięte": 1},
+                  "total": 1,
+                  "shown": 1
+                }
+                """.trimIndent()
+            )
+        )
+
+        viewModel.setShowAll(true)
+        advanceUntilIdle()
+
+        val req = server.takeRequest()
+        assertTrue("Żądanie musi zawierać all=1", req.path!!.contains("all=1"))
+        assertTrue("Żądanie musi zawierać limit=100", req.path!!.contains("limit=100"))
+        assertTrue(viewModel.showAll.value)
+        assertTrue(viewModel.uiState.value is DigestUiState.Content)
+        assertTrue((viewModel.uiState.value as DigestUiState.Content).showAll)
     }
 }

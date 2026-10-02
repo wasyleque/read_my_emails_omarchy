@@ -54,6 +54,7 @@ class ServerContext:
     device_manager: DeviceManager
     service: Any = None  # MailService | None
     on_ignore: Callable[[IgnoreRule], None] | None = None  # przekazanie do wątku GUI
+    on_vip: Callable[[IgnoreRule], None] | None = None  # j.w., dla reguł VIP
     # losowy klucz na każde uruchomienie serwera: identyfikatory maili są nieprzewidywalne
     server_key: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     opaque_id_map: dict[str, tuple[str, str, int, int]] = field(default_factory=dict)
@@ -324,8 +325,8 @@ async def handle_mail_summary(request: web.Request) -> web.Response:
     )
 
 
-async def handle_mail_ignore(request: web.Request) -> web.Response:
-    """POST /v1/mails/{id}/ignore {mode} - Ignoruje podobne maile (similar | sender | domain)."""
+async def _handle_mail_rule(request: web.Request, kind: str) -> web.Response:
+    """Wspólna obsługa „ignoruj” i „VIP”: tworzy regułę z maila i przekazuje ją do GUI."""
     ctx: ServerContext = request.app[CONTEXT_KEY]
     target = ctx.opaque_id_map.get(request.match_info["id"])
     if not target:
@@ -336,15 +337,26 @@ async def handle_mail_ignore(request: web.Request) -> web.Response:
     except (ValueError, AttributeError):
         return web.json_response({"error": "Niepoprawne żądanie."}, status=400)
     if mode not in IGNORE_MODES:
-        return web.json_response({"error": "Nieznany tryb ignorowania."}, status=400)
-    if ctx.on_ignore is None:
-        return web.json_response({"error": "Ignorowanie jest niedostępne."}, status=503)
+        return web.json_response({"error": "Nieznany tryb."}, status=400)
+    callback = ctx.on_ignore if kind == "ignore" else ctx.on_vip
+    if callback is None:
+        return web.json_response({"error": "Ta funkcja jest niedostępna."}, status=503)
     record = ctx.store.get_mail_index(*target)
     if not record:
         return web.json_response({"error": "Wiadomość nie znaleziona."}, status=404)
     rule = rule_for_mail(mode, record.sender, record.subject)
-    ctx.on_ignore(rule)
+    callback(rule)
     return web.json_response({"status": "ok", "mode": mode, "rule": rule.describe()})
+
+
+async def handle_mail_ignore(request: web.Request) -> web.Response:
+    """POST /v1/mails/{id}/ignore {mode} - Ignoruje podobne maile (similar | sender | domain)."""
+    return await _handle_mail_rule(request, "ignore")
+
+
+async def handle_mail_vip(request: web.Request) -> web.Response:
+    """POST /v1/mails/{id}/vip {mode} - Oznacza nadawcę/podobne maile jako VIP (jak „ignoruj”)."""
+    return await _handle_mail_rule(request, "vip")
 
 
 async def handle_mail_ack(request: web.Request) -> web.Response:
@@ -583,6 +595,7 @@ def create_app(context: ServerContext) -> web.Application:
     app.router.add_get("/v1/mails/{id}/summary", handle_mail_summary)
     app.router.add_post("/v1/mails/{id}/ack", handle_mail_ack)
     app.router.add_post("/v1/mails/{id}/ignore", handle_mail_ignore)
+    app.router.add_post("/v1/mails/{id}/vip", handle_mail_vip)
     app.router.add_get("/v1/digest", handle_digest)
     app.router.add_post("/v1/voice/command", handle_voice_command)
     app.router.add_delete("/v1/devices/self", handle_disconnect_self)

@@ -354,31 +354,29 @@ fun PairedAppMain(
             ) {
                 when (selectedTab) {
                     0 -> {
-                        val mails by mailsViewModel.mails.collectAsState()
-                        val isLoading by mailsViewModel.isLoading.collectAsState()
+                        val mailsUiState by mailsViewModel.uiState.collectAsState()
                         MailsListScreen(
-                            mails = mails,
-                            isLoading = isLoading,
+                            uiState = mailsUiState,
                             onRefresh = { mailsViewModel.loadMails() },
                             onMailClicked = { mail -> mailsViewModel.selectMail(mail) },
                             onStartVoiceSession = { mailsViewModel.startVoiceSession() },
-                            onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) }
+                            onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) },
+                            onDismissRefreshError = { mailsViewModel.dismissRefreshError() }
                         )
                     }
                     1 -> {
-                        val digest by digestViewModel.digest.collectAsState()
+                        val digestUiState by digestViewModel.uiState.collectAsState()
                         val days by digestViewModel.days.collectAsState()
-                        val isLoading by digestViewModel.isLoading.collectAsState()
                         DigestScreen(
-                            digest = digest,
+                            uiState = digestUiState,
                             days = days,
-                            isLoading = isLoading,
                             onPeriodSelected = { newDays -> digestViewModel.setDays(newDays) },
                             onRefresh = { digestViewModel.loadDigest() },
                             onListenTopic = { topic ->
                                 val topicText = "Sprawa: ${topic.title}. ${topic.why}"
                                 ttsHelper.speak(topicText)
-                            }
+                            },
+                            onToggleShowAll = { all -> digestViewModel.setShowAll(all) }
                         )
                     }
                     2 -> {

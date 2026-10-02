@@ -33,7 +33,7 @@ from mailvoice.core.contacts import ContactCard
 from mailvoice.core.devices import DeviceManager
 from mailvoice.core.digest import Digest, Topic
 from mailvoice.core.friendly_errors import format_friendly_error
-from mailvoice.core.ignore import IgnoreRule, add_ignore_rule, rule_for_mail
+from mailvoice.core.ignore import IgnoreRule, add_ignore_rule, add_vip_rule, rule_for_mail
 from mailvoice.core.phishing import defang_url
 from mailvoice.core.pipeline import CycleResult, PendingBacklog, ProcessedMail
 from mailvoice.core.service import (
@@ -123,6 +123,7 @@ class ServiceEventBridge(QObject):
 
     new_event = Signal(object)
     ignore_rule = Signal(object)  # żądanie ignorowania z telefonu (wątek serwera -> wątek GUI)
+    vip_rule = Signal(object)  # żądanie oznaczenia VIP z telefonu
 
 
 class MainWindow(QMainWindow):
@@ -154,6 +155,7 @@ class MainWindow(QMainWindow):
         self.bridge = ServiceEventBridge()
         self.bridge.new_event.connect(self._handle_service_event)
         self.bridge.ignore_rule.connect(self._apply_ignore_rule)
+        self.bridge.vip_rule.connect(self._apply_vip_rule)
 
         if self.service:
             self.service.add_listener(self._on_service_event)
@@ -217,7 +219,7 @@ class MainWindow(QMainWindow):
         lbl_section.setStyleSheet("font-weight: bold; margin-top: 4px; margin-bottom: 4px;")
         msg_layout.addWidget(lbl_section)
 
-        self.tbl_mails = QTableWidget(0, 6)
+        self.tbl_mails = QTableWidget(0, 7)
         self.tbl_mails.setHorizontalHeaderLabels(
             [
                 tr("col_sender"),
@@ -226,6 +228,7 @@ class MainWindow(QMainWindow):
                 tr("col_account"),
                 tr("col_actions"),
                 tr("col_ignore"),
+                tr("col_vip"),
             ]
         )
         header = self.tbl_mails.horizontalHeader()
@@ -235,6 +238,7 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         if not self.service or len(self.service.config.accounts) <= 1:
             self.tbl_mails.setColumnHidden(3, True)
         self.tbl_mails.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -507,6 +511,24 @@ class MainWindow(QMainWindow):
         btn_ignore.clicked.connect(lambda _, m=item: self._ignore_mail(m))
         self.tbl_mails.setCellWidget(row, 5, btn_ignore)
 
+        btn_vip = QPushButton(tr("btn_vip"))
+        btn_vip.clicked.connect(lambda _, m=item: self._vip_mail(m))
+        self.tbl_mails.setCellWidget(row, 6, btn_vip)
+
+    def _vip_mail(self, item: ProcessedMail) -> None:
+        """Pyta, jak oznaczyć VIP (podobne / nadawca / domena) i zapamiętuje regułę."""
+        dialog = IgnoreDialog(item.mail.sender, item.mail.subject, self, kind="vip")
+        if dialog.exec() != IgnoreDialog.DialogCode.Accepted:
+            return
+        self._apply_vip_rule(rule_for_mail(dialog.mode(), item.mail.sender, item.mail.subject))
+
+    def _apply_vip_rule(self, rule: IgnoreRule) -> None:
+        """Dodaje regułę VIP (także z telefonu): takie maile od teraz zawsze powiadamiają."""
+        if not self.service:
+            return
+        self._on_config_updated(add_vip_rule(self.service.config, rule))
+        self.lbl_status.setText(tr("vip_done", rule=rule.describe()))
+
     def _ignore_mail(self, item: ProcessedMail) -> None:
         """Pyta, co zignorować, i zapamiętuje regułę (nadawca / domena / podobny temat)."""
         dialog = IgnoreDialog(item.mail.sender, item.mail.subject, self)
@@ -636,6 +658,7 @@ class MainWindow(QMainWindow):
                     service=self.service,
                     data_dir=self.data_dir,
                     on_ignore=self.bridge.ignore_rule.emit,
+                    on_vip=self.bridge.vip_rule.emit,
                 )
                 self.service.add_listener(self.mobile_server.broadcast_event)
                 try:

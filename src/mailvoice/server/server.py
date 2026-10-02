@@ -43,6 +43,7 @@ class MobileServer:
         service: Any = None,
         data_dir: Path | None = None,
         on_ignore: Callable[[Any], None] | None = None,
+        on_vip: Callable[[Any], None] | None = None,
     ) -> None:
         self.config = config
         self.store = store
@@ -74,6 +75,7 @@ class MobileServer:
             device_manager=self.device_manager,
             service=self.service,
             on_ignore=on_ignore,
+            on_vip=on_vip,
         )
 
     def update_config(self, config) -> None:

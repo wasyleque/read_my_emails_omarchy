@@ -378,4 +378,121 @@ class MailApiTest {
         assertEquals(401, error.httpCode)
         assertFalse("TokenStore musi zostać wyczyszczony przy 401", tokenStore.isPaired())
     }
+
+    @Test
+    fun testGetDigestWithCountsTotalShownAndAllParameter() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "period": "ostatnie 30 dni",
+                      "topics": [
+                        {
+                          "title": "Projekt ERP",
+                          "status": "oczekuje_na_mnie",
+                          "why": "Zatwierdzenie",
+                          "importance": 8,
+                          "mail_count": 3,
+                          "last_activity": "2026-10-02T16:00:00Z",
+                          "who_to_whom": ["Klient -> Ty"]
+                        }
+                      ],
+                      "counts": {
+                        "oczekuje_na_mnie": 134,
+                        "oczekuje_na_innych": 36,
+                        "zamknięte": 200,
+                        "informacyjne": 97
+                      },
+                      "total": 467,
+                      "shown": 100
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val result = api.getDigest(days = 30, limit = 100, all = true)
+
+        val recorded = server.takeRequest()
+        assertEquals("/v1/digest?days=30&limit=100&all=1", recorded.path)
+
+        assertTrue(result is ApiResult.Success)
+        val digest = (result as ApiResult.Success).data
+        assertEquals("ostatnie 30 dni", digest.period)
+        assertEquals(1, digest.topics.size)
+        assertEquals(134, digest.counts["oczekuje_na_mnie"])
+        assertEquals(36, digest.counts["oczekuje_na_innych"])
+        assertEquals(200, digest.counts["zamknięte"])
+        assertEquals(97, digest.counts["informacyjne"])
+        assertEquals(467, digest.total)
+        assertEquals(100, digest.shown)
+        // Licznik ukrytych tematów
+        val hiddenCount = (digest.total ?: 0) - (digest.shown ?: 0)
+        assertEquals(367, hiddenCount)
+    }
+
+    @Test
+    fun testGetDigestWithoutCountsBackwardCompatible() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "period": "ostatnie 30 dni",
+                      "topics": []
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val result = api.getDigest(days = 30, limit = 60, all = false)
+
+        val recorded = server.takeRequest()
+        assertEquals("/v1/digest?days=30&limit=60", recorded.path)
+
+        assertTrue(result is ApiResult.Success)
+        val digest = (result as ApiResult.Success).data
+        assertTrue(digest.counts.isEmpty())
+        assertNull(digest.total)
+        assertNull(digest.shown)
+    }
+
+    @Test
+    fun testErrorMapping429RateLimit() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(MockResponse().setResponseCode(429).setBody("Too Many Requests"))
+
+        val result = api.getImportantMails()
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertEquals(429, error.httpCode)
+        assertTrue(error.message.contains("Zbyt wiele zapytań"))
+    }
+
+    @Test
+    fun testErrorMapping500ServerError() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(MockResponse().setResponseCode(500).setBody("Internal Server Error"))
+
+        val result = api.getImportantMails()
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertEquals(500, error.httpCode)
+        assertTrue(error.message.contains("Błąd serwera na komputerze"))
+    }
+
+    @Test
+    fun testErrorMappingInvalidJson() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("not valid json"))
+
+        val result = api.getImportantMails()
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertTrue(error.message.contains("Błąd przetwarzania odpowiedzi serwera"))
+    }
 }

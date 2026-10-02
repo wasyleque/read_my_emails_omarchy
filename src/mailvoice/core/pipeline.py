@@ -221,7 +221,11 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
     Awaria Ollamy dla jednego maila nie przerywa cyklu ani nie gubi maila.
     """
     result = CycleResult()
-    known_contacts = list(deps.config.vip_senders) + deps.store.get_all_contact_addresses()
+    known_contacts = (
+        list(deps.config.vip_senders)
+        + [r.sender for r in deps.config.vip_rules if r.sender]
+        + deps.store.get_all_contact_addresses()
+    )
     my_addresses = [acc.username for acc in deps.config.accounts if acc.username]
 
     for account in deps.config.accounts:
@@ -278,6 +282,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
             known_domains=known_domains,
             auto_vip=deps.config.auto_vip,
             vip_senders=tuple(deps.config.vip_senders),
+            vip_rules=tuple(deps.config.vip_rules),
             keywords=tuple(deps.config.keywords),
             blocked_senders=tuple(deps.config.blocked_senders),
             ignore_rules=tuple(deps.config.ignore_rules),

@@ -219,6 +219,9 @@ fun MailsListScreen(
                             androidx.compose.material3.TextButton(onClick = onRefresh) {
                                 Text(stringResource(R.string.btn_retry))
                             }
+                            androidx.compose.material3.TextButton(onClick = onDismissRefreshError) {
+                                Text(stringResource(R.string.btn_dismiss))
+                            }
                         }
                     }
                 }

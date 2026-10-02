@@ -100,3 +100,20 @@ Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
   - Okno dialogowe (`IgnoreMailDialog`) z trzema opcjami wyboru (Radio), podglądem nadawcy i tematu, blokadą ponownych kliknięć podczas wysyłania żądania oraz czytelnym wyjaśnieniem, że komputer zapamiętuje regułę i można ją edytować/usunąć w Ustawieniach na komputerze.
   - Po zatwierdzeniu: natychmiastowe usunięcie pozycji z lokalnego widoku, powiadomienie „Zignorowano” (Toast) oraz automatyczne odświeżenie listy z serwera w celu zsynchronizowania innych wiadomości objętych nowo utworzoną regułą.
   - Przyjazna obsługa błędów (400, 404, 503, brak sieci) w języku polskim z możliwością natychmiastowego ponowienia próby, a przy błędzie autoryzacji (401) automatyczny powrót do ekranu parowania.
+
+---
+
+## 6. Obsługa stanów ekranu i podsumowanie spraw (B4: Sprawy i odporność UI)
+
+- **Jawne stany ekranu (`MailsUiState`, `DigestUiState`)**:
+  - Wszystkie listy operują na modelu stanów: `Loading`, `Content`, `Empty`, `Error`.
+  - Komunikat stanu pustego (np. „Brak ważnych maili”, „Brak aktywnych spraw w wybranym okresie”) wyświetlany jest **wyłącznie po udanym pobraniu pustej listy** (HTTP 200).
+  - W razie błędu sieciowego, przekroczenia limitu czasu (timeout), błędu serwera (5xx), limitu zapytań (429) lub parsowania, użytkownik otrzymuje czytelny komunikat po polsku z przyciskiem „Spróbuj ponownie”.
+  - Odświeżenie listy z błędem **nie kasuje** wcześniej pobranych wiadomości/spraw — prezentowana jest dotychczasowa lista wraz z banerem błędu u góry.
+- **Optymalizacja podsumowania tematów (`GET /v1/digest`)**:
+  - Dedykowany limit czasu odczytu 30 s dla zapytania digestu bez modyfikacji limitu globalnego.
+  - Domyślne parametry: `GET /v1/digest?days=30&limit=60` zwracające tylko sprawy otwarte.
+  - Rozszerzenie modelu `TopicDigest` o pola `counts` (mapa liczników statusów), `total` i `shown` (z pełną odpornością na brak tych pól przy starszych wersjach serwera).
+  - Nagłówek z licznikami spraw: „Czeka na Ciebie: X · Czeka na innych: Y”.
+  - Przycisk oraz przełącznik „Pokaż także zamknięte i informacyjne (N)” doładowujący sprawy zamknięte i informacyjne (`all=1&limit=100`), z notatką gdy `shown < total` („Pokazano X z Y tematów”).
+  - Wskaźnik ładowania z informacją: „Przygotowuję podsumowanie… Pierwsze ładowanie może potrwać kilka sekund”.
