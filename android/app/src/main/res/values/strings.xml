@@ -1,11 +1,20 @@
 <resources>
     <string name="app_name">MailVoice</string>
 
+    <!-- Pasek nawigacji -->
+    <string name="tab_important">Ważne maile</string>
+    <string name="tab_digest">Sprawy</string>
+    <string name="tab_settings">Ustawienia</string>
+
     <!-- Nagłówki ekranów -->
     <string name="title_pair">Sparuj z komputerem</string>
     <string name="title_connected">Połączono z komputerem</string>
     <string name="title_scanner">Zeskanuj kod QR</string>
     <string name="title_manual_entry">Wpisz dane ręcznie</string>
+    <string name="title_important_mails">Ważne wiadomości</string>
+    <string name="title_mail_detail">Szczegóły wiadomości</string>
+    <string name="title_digest">Podsumowanie tematów</string>
+    <string name="title_settings">Ustawienia</string>
 
     <!-- Instrukcja 1-2-3 -->
     <string name="guide_title">Jak połączyć telefon z programem:</string>
@@ -13,7 +22,7 @@
     <string name="guide_step_2">2. W oknie programu przejdź do: Ustawienia → Telefon.</string>
     <string name="guide_step_3">3. Kliknij „Sparuj nowy telefon” i skieruj aparat na wyświetlony kod QR.</string>
 
-    <!-- Przyciski -->
+    <!-- Przyciski ogólne -->
     <string name="btn_scan_qr">Zeskanuj kod QR</string>
     <string name="btn_manual_entry">Wpisz kod ręcznie</string>
     <string name="btn_check_connection">Sprawdź połączenie</string>
@@ -22,13 +31,17 @@
     <string name="btn_connect">Połącz z komputerem</string>
     <string name="btn_retry">Spróbuj ponownie</string>
     <string name="btn_grant_camera">Zezwól na aparat</string>
+    <string name="btn_grant_mic">Zezwól na mikrofon</string>
     <string name="btn_ok">Rozumiem</string>
     <string name="btn_back">Wstecz</string>
+    <string name="btn_refresh">Odśwież</string>
 
-    <!-- Uprawnienie aparatu -->
+    <!-- Uprawnienia -->
     <string name="camera_rationale_title">Aparat jest potrzebny do skanowania</string>
     <string name="camera_rationale_desc">Aparat jest używany wyłącznie do jednorazowego zeskanowania kodu QR z ekranu komputera. Aplikacja nie zapisuje zdjęć ani filmów.</string>
     <string name="camera_permission_denied">Brak uprawnienia do aparatu. Możesz wpisać dane parowania ręcznie poniżej.</string>
+    <string name="mic_rationale_title">Dostęp do mikrofonu</string>
+    <string name="mic_rationale_desc">Mikrofon jest potrzebny do odbierania Twoich komend głosowych po odsłuchaniu wiadomości (np. „tak”, „następny”, „stop”). Rozpoznawanie działa lokalnie na telefonie.</string>
 
     <!-- Skaner QR -->
     <string name="scanner_hint">Skieruj aparat na kod QR na ekranie komputera</string>
@@ -43,12 +56,56 @@
     <string name="label_fingerprint">Odcisk certyfikatu SHA-256 (64 znaki hex)</string>
     <string name="error_fill_fields">Wypełnij link QR lub wszystkie wymagane pola (adres IP, kod i odcisk).</string>
 
-    <!-- Ekran połączono -->
-    <string name="status_connected_desc">Telefon jest połączony i zsynchronizowany z programem MailVoice na Twoim komputerze.</string>
+    <!-- Lista ważnych maili -->
+    <string name="btn_listen_all">Odsłuchaj wiadomości</string>
+    <string name="empty_mails">Brak ważnych maili</string>
+    <string name="empty_mails_desc">Wszystkie Twoje wiadomości są pod kontrolą!</string>
+    <string name="label_importance_format">Ważność %1$d/10</string>
+    <string name="label_why_prefix">Dlaczego: </string>
+    <string name="badge_suspicious">⚠ PODEJRZANY</string>
+    <string name="badge_acknowledged">✓ Wysłuchany</string>
+
+    <!-- Szczegóły maila -->
+    <string name="suspicious_warning_title">Uwaga: podejrzenie zagrożenia</string>
+    <string name="suspicious_warning_desc">Wiadomość została zaklasyfikowana jako podejrzana (próba wyłudzenia danych lub złośliwy link). Ze względów bezpieczeństwa treść oraz odnośniki zostały całkowicie zablokowane.</string>
+    <string name="btn_listen">Posłuchaj streszczenia</string>
+    <string name="btn_ack">Oznacz jako wysłuchane</string>
+    <string name="summary_label">Streszczenie wiadomości:</string>
+    <string name="sender_label">Od: %1$s</string>
+    <string name="date_label">Data: %1$s</string>
+
+    <!-- Podsumowanie tematów (Digest) -->
+    <string name="digest_week">Tydzień (7 dni)</string>
+    <string name="digest_month">Miesiąc (30 dni)</string>
+    <string name="digest_group_me">Czeka na Ciebie (%1$d)</string>
+    <string name="digest_group_others">Czeka na innych (%1$d)</string>
+    <string name="digest_group_info">Informacje (%1$d)</string>
+    <string name="empty_digest">Brak aktywnych spraw w wybranym okresie.</string>
+    <string name="topic_exchange_format">Wymiana: %1$s</string>
+    <string name="topic_mail_count_format">Wiadomości w wątku: %1$d</string>
+    <string name="btn_listen_topic">Posłuchaj tematu</string>
+
+    <!-- Sesja głosowa -->
+    <string name="voice_session_title">Odsłuchiwanie wiadomości</string>
+    <string name="voice_reading">Czytam streszczenie...</string>
+    <string name="voice_asking">Pytanie asystenta:</string>
+    <string name="voice_listening">Słucham... powiedz np. „tak”, „następny”, „powtórz” lub „stop”</string>
+    <string name="btn_next_mail">Następny</string>
+    <string name="btn_repeat_mail">Powtórz</string>
+    <string name="btn_skip_mail">Pomiń</string>
+    <string name="btn_stop_session">Zatrzymaj</string>
+
+    <!-- Ustawienia -->
+    <string name="settings_server_title">Połączenie z serwerem</string>
+    <string name="settings_voice_title">Ustawienia głosu</string>
+    <string name="label_voice_lang">Język asystenta głosowego</string>
+    <string name="lang_pl">Polski (domyślny)</string>
+    <string name="lang_en">English (Angielski)</string>
     <string name="server_address_format">Adres komputera: %1$s:%2$d</string>
-    <string name="server_version_format">Wersja serwera: %1$s</string>
+    <string name="server_version_format">Wersja programu: %1$s</string>
     <string name="accounts_count_format">Skrzynki pocztowe: %1$d</string>
     <string name="devices_count_format">Sparowane telefony: %1$d</string>
+    <string name="status_connected_desc">Telefon jest połączony i zsynchronizowany z programem MailVoice na Twoim komputerze.</string>
     <string name="status_connecting">Łączenie z komputerem...</string>
     <string name="status_refreshing">Sprawdzanie stanu połączenia...</string>
 

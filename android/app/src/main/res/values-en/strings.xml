@@ -1,11 +1,20 @@
 <resources>
     <string name="app_name">MailVoice</string>
 
+    <!-- Navigation bar -->
+    <string name="tab_important">Important</string>
+    <string name="tab_digest">Digest</string>
+    <string name="tab_settings">Settings</string>
+
     <!-- Screen titles -->
     <string name="title_pair">Pair with computer</string>
     <string name="title_connected">Connected to computer</string>
     <string name="title_scanner">Scan QR code</string>
     <string name="title_manual_entry">Enter details manually</string>
+    <string name="title_important_mails">Important emails</string>
+    <string name="title_mail_detail">Email details</string>
+    <string name="title_digest">Topic Digest</string>
+    <string name="title_settings">Settings</string>
 
     <!-- 1-2-3 guide -->
     <string name="guide_title">How to connect phone to MailVoice:</string>
@@ -22,13 +31,17 @@
     <string name="btn_connect">Connect to computer</string>
     <string name="btn_retry">Try again</string>
     <string name="btn_grant_camera">Allow camera</string>
+    <string name="btn_grant_mic">Allow microphone</string>
     <string name="btn_ok">Understood</string>
     <string name="btn_back">Back</string>
+    <string name="btn_refresh">Refresh</string>
 
-    <!-- Camera permission -->
+    <!-- Permissions -->
     <string name="camera_rationale_title">Camera is required for scanning</string>
     <string name="camera_rationale_desc">Camera is only used to scan the QR code from your computer screen once. The app does not save photos or videos.</string>
     <string name="camera_permission_denied">Camera permission was not granted. You can enter pairing details manually below.</string>
+    <string name="mic_rationale_title">Microphone access</string>
+    <string name="mic_rationale_desc">Microphone is required to receive your voice answers after reading emails (e.g. \"yes\", \"next\", \"stop\"). Speech recognition runs locally on your phone.</string>
 
     <!-- QR scanner -->
     <string name="scanner_hint">Point camera at the QR code on your computer screen</string>
@@ -43,12 +56,56 @@
     <string name="label_fingerprint">SHA-256 Certificate Fingerprint (64 hex characters)</string>
     <string name="error_fill_fields">Please provide a QR link or fill in all required fields (IP, code, and fingerprint).</string>
 
-    <!-- Connected screen -->
-    <string name="status_connected_desc">Phone is connected and synchronized with MailVoice on your computer.</string>
+    <!-- Important mails list -->
+    <string name="btn_listen_all">Listen to emails</string>
+    <string name="empty_mails">No important emails</string>
+    <string name="empty_mails_desc">All your emails are under control!</string>
+    <string name="label_importance_format">Importance %1$d/10</string>
+    <string name="label_why_prefix">Why: </string>
+    <string name="badge_suspicious">⚠ SUSPICIOUS</string>
+    <string name="badge_acknowledged">✓ Listened</string>
+
+    <!-- Mail details -->
+    <string name="suspicious_warning_title">Warning: potential security threat</string>
+    <string name="suspicious_warning_desc">This email has been classified as suspicious (phishing attempt or malicious link). Email body and links have been completely blocked for your security.</string>
+    <string name="btn_listen">Listen to summary</string>
+    <string name="btn_ack">Mark as listened</string>
+    <string name="summary_label">Email summary:</string>
+    <string name="sender_label">From: %1$s</string>
+    <string name="date_label">Date: %1$s</string>
+
+    <!-- Digest -->
+    <string name="digest_week">Week (7 days)</string>
+    <string name="digest_month">Month (30 days)</string>
+    <string name="digest_group_me">Waiting for you (%1$d)</string>
+    <string name="digest_group_others">Waiting for others (%1$d)</string>
+    <string name="digest_group_info">Information (%1$d)</string>
+    <string name="empty_digest">No active topics in selected period.</string>
+    <string name="topic_exchange_format">Exchange: %1$s</string>
+    <string name="topic_mail_count_format">Thread emails: %1$d</string>
+    <string name="btn_listen_topic">Listen to topic</string>
+
+    <!-- Voice session -->
+    <string name="voice_session_title">Email Audio Reader</string>
+    <string name="voice_reading">Reading summary...</string>
+    <string name="voice_asking">Assistant question:</string>
+    <string name="voice_listening">Listening... say \"yes\", \"next\", \"repeat\" or \"stop\"</string>
+    <string name="btn_next_mail">Next</string>
+    <string name="btn_repeat_mail">Repeat</string>
+    <string name="btn_skip_mail">Skip</string>
+    <string name="btn_stop_session">Stop</string>
+
+    <!-- Settings -->
+    <string name="settings_server_title">Server connection</string>
+    <string name="settings_voice_title">Voice settings</string>
+    <string name="label_voice_lang">Voice assistant language</string>
+    <string name="lang_pl">Polish (Polski)</string>
+    <string name="lang_en">English (default)</string>
     <string name="server_address_format">Computer address: %1$s:%2$d</string>
-    <string name="server_version_format">Server version: %1$s</string>
+    <string name="server_version_format">App version: %1$s</string>
     <string name="accounts_count_format">Email accounts: %1$d</string>
     <string name="devices_count_format">Paired phones: %1$d</string>
+    <string name="status_connected_desc">Phone is connected and synchronized with MailVoice on your computer.</string>
     <string name="status_connecting">Connecting to computer...</string>
     <string name="status_refreshing">Checking connection status...</string>
 

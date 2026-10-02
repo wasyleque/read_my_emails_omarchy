@@ -65,3 +65,21 @@ Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
 - **Bezpieczny magazyn poświadczeń (`KeystoreTokenStore`)**: Token Bearer i odcisk serwera są szyfrowane algorytmem AES-256-GCM kluczem sprzętowym z `AndroidKeyStore`. Wektor IV (12 bajtów) generowany jest losowo przy każdym zapisie. Kopie zapasowe są wyłączone (`allowBackup="false"`).
 - **Zasady prywatności**: Tokeny i dane uwierzytelniające nigdy nie trafiają do logów systemowych (`android.util.Log`). Surowe treści e-mail oraz załączniki nigdy nie są pobierane ani przetwarzane przez telefon.
 - **Zasady UX**: Interfejs krok po kroku z instrukcją 1-2-3, celownikiem skanera, możliwością ręcznego wpisania parametrów, przyjaznymi komunikatami błędów po polsku i angielsku (i18n).
+
+---
+
+## 4. Architektura poczty i głosu (B2: Poczta, Digest i asystent głosowy)
+
+- **Klient API (`MailApi`)**:
+  - Obsługuje zapytania do endpointów REST serwera: `GET /v1/mails/important`, `GET /v1/mails/{id}/summary`, `POST /v1/mails/{id}/ack`, `GET /v1/digest`, `POST /v1/voice/command`, `GET /v1/status`.
+  - Wszystkie żądania autoryzowane nagłówkiem `Authorization: Bearer <token>`.
+  - Przy błędzie `401 Unauthorized` token jest natychmiast usuwany z telefonu, a aplikacja bezpiecznie powraca do ekranu parowania.
+- **Antyphishing i izolacja niebezpiecznych treści**:
+  - Wiadomości podejrzane (`suspicious == true`) mają całkowicie zablokowaną treść i streszczenie. Aplikacja nie pozwala na ich odsłuchanie głosem ani nie wyświetla linków.
+  - Przed odczytaniem czegokolwiek przez syntezator mowy (`TextToSpeech`), tekst jest przetwarzany przez `UrlSanitizer.prepareForSpeech()`, który usuwa wszystkie odnośniki i zastępuje je naturalną frazą „odnośnik pominięty”.
+- **Asystent głosowy i przepływ „Czytać dalej?”**:
+  - Maszyna stanów `VoiceSessionController` zarządza kolejką czytania, pytaniem „Czytać dalej?” i nasłuchem komend użytkownika.
+  - **Kluczowa zasada bezpieczeństwa**: Komendy wysyłane do `/v1/voice/command` pochodzą **WYŁĄCZNIE z mikrofonu użytkownika** (STT), nigdy z treści maila.
+  - Słuchanie opiera się na `SpeechRecognizer` (z preferencją trybu on-device od API 31+). Aplikacja nie wymaga Usług Google Play i oferuje pełne przyciski dotykowe jako alternatywę w głośnym otoczeniu.
+  - Uprawnienie `RECORD_AUDIO` jest żądane z wyjaśnieniem wyłącznie przy pierwszym użyciu mikrofonu.
+  - Widoczność pakietów na Androidzie 11+ jest zadeklarowana w `<queries>` dla `android.speech.RecognitionService` oraz `android.intent.action.TTS_SERVICE`.

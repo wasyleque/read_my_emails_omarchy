@@ -3,7 +3,20 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Widoczność pakietów na Androidzie 11+ dla usług mowy i TTS -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <!-- Prywatność: bez kopii zapasowych w chmurze (token urządzenia nie może się tam znaleźć)
          i bez ruchu nieszyfrowanego (serwer MailVoice używa HTTPS z przypiętym certyfikatem). -->
