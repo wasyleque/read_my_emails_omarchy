@@ -116,4 +116,16 @@
     <!-- Błędy i ostrzeżenia -->
     <string name="alert_security_title">Ostrzeżenie bezpieczeństwa</string>
     <string name="alert_error_title">Błąd połączenia</string>
+
+    <!-- Powiadomienia w tle -->
+    <string name="bg_title">Powiadomienia w tle</string>
+    <string name="bg_switch">Powiadamiaj o ważnych mailach, gdy aplikacja jest zamknięta</string>
+    <string name="bg_notif_ok">Powiadomienia są dozwolone.</string>
+    <string name="bg_notif_off">Powiadomienia są wyłączone — nie zobaczysz ostrzeżeń.</string>
+    <string name="bg_allow_notif">Zezwól na powiadomienia</string>
+    <string name="bg_battery_ok">Aplikacja może pracować w tle bez ograniczeń baterii.</string>
+    <string name="bg_battery_limited">System może usypiać aplikację i spóźniać powiadomienia.</string>
+    <string name="bg_allow_battery">Zezwól na pracę w tle</string>
+    <string name="bg_xiaomi_hint">Na telefonach Xiaomi/Poco włącz też „Autostart” dla MailVoice i ustaw baterię na „Bez ograniczeń”.</string>
+    <string name="bg_open_autostart">Otwórz ustawienia autostartu</string>
 </resources>

@@ -185,6 +185,10 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        io.github.wasyleque.mailvoice.background.BackgroundSettingsCard()
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // Przycisk odłączenia telefonu
         OutlinedButton(
             onClick = onRequestDisconnect,

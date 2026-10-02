@@ -116,4 +116,16 @@
     <!-- Errors and alerts -->
     <string name="alert_security_title">Security Warning</string>
     <string name="alert_error_title">Connection Error</string>
+
+    <!-- Background notifications -->
+    <string name="bg_title">Background notifications</string>
+    <string name="bg_switch">Notify about important mail when the app is closed</string>
+    <string name="bg_notif_ok">Notifications are allowed.</string>
+    <string name="bg_notif_off">Notifications are off — you will not see warnings.</string>
+    <string name="bg_allow_notif">Allow notifications</string>
+    <string name="bg_battery_ok">The app can run in the background without battery limits.</string>
+    <string name="bg_battery_limited">The system may put the app to sleep and delay notifications.</string>
+    <string name="bg_allow_battery">Allow background activity</string>
+    <string name="bg_xiaomi_hint">On Xiaomi/Poco phones also enable “Autostart” for MailVoice and set battery to “No restrictions”.</string>
+    <string name="bg_open_autostart">Open autostart settings</string>
 </resources>

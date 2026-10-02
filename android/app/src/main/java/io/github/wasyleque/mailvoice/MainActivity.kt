@@ -159,7 +159,10 @@ fun MailVoiceApp(
                 mailApi = mailApi,
                 pairingRepository = pairingRepository,
                 tokenStore = tokenStore,
-                onDisconnected = { mainViewModel.onBackToUnpaired() }
+                onDisconnected = {
+                    io.github.wasyleque.mailvoice.background.BackgroundController.stop(context.applicationContext)
+                    mainViewModel.onBackToUnpaired()
+                }
             )
         }
     }
@@ -173,6 +176,7 @@ fun PairedAppMain(
     onDisconnected: () -> Unit
 ) {
     val context = LocalContext.current
+    io.github.wasyleque.mailvoice.background.BackgroundBootstrap()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val mailsViewModel: MailsViewModel = viewModel(
