@@ -444,8 +444,8 @@ class ImportancePage(QWizardPage):
         layout.addWidget(QLabel(tr("step4_desc_label")))
         self.txt_desc = QTextEdit()
         self.txt_desc.setPlainText(tr("template_work_text"))
-        self.txt_desc.setMaximumHeight(80)
-        layout.addWidget(self.txt_desc)
+        self.txt_desc.setMinimumHeight(110)  # długi opis: więcej niż 3 linijki, rośnie z oknem
+        layout.addWidget(self.txt_desc, 1)
 
         # Suwak ostrości oceny
         layout.addWidget(QLabel(tr("step4_threshold_label")))

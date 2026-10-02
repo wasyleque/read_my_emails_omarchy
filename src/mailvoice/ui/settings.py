@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -391,8 +392,11 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(QLabel(tr("step4_desc_label")))
         self.txt_desc = QTextEdit()
-        self.txt_desc.setMaximumHeight(70)
-        layout.addWidget(self.txt_desc)
+        self.txt_desc.setMinimumHeight(
+            140
+        )  # długi tekst: zawsze kilka linii, a gdy okno większe — więcej
+        self.txt_desc.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.txt_desc, 1)  # rozciągnij: zajmuje wolne miejsce zakładki
 
         layout.addWidget(QLabel(tr("step4_threshold_label")))
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -418,12 +422,12 @@ class SettingsDialog(QDialog):
         vip_box.addLayout(vip_in)
 
         self.list_vip = QListWidget()
-        self.list_vip.setMaximumHeight(110)
+        self.list_vip.setMinimumHeight(90)
         vip_box.addWidget(self.list_vip)
         btn_del_vip = QPushButton(tr("remove_btn"))
         btn_del_vip.clicked.connect(lambda: self._remove_selected(self.list_vip))
         vip_box.addWidget(btn_del_vip)
-        people_layout.addLayout(vip_box)
+        people_layout.addLayout(vip_box, 1)
 
         # Słowa
         kw_box = QVBoxLayout()
@@ -437,12 +441,12 @@ class SettingsDialog(QDialog):
         kw_box.addLayout(kw_in)
 
         self.list_kw = QListWidget()
-        self.list_kw.setMaximumHeight(80)
+        self.list_kw.setMinimumHeight(80)
         kw_box.addWidget(self.list_kw)
         btn_del_kw = QPushButton(tr("remove_btn"))
         btn_del_kw.clicked.connect(lambda: self._remove_selected(self.list_kw))
         kw_box.addWidget(btn_del_kw)
-        rules_layout.addLayout(kw_box)
+        rules_layout.addLayout(kw_box, 1)
 
         # Osoby, do których piszesz (automatycznie z folderu Wysłane)
         people_layout.addWidget(QLabel(tr("auto_vip_label")))
@@ -480,8 +484,8 @@ class SettingsDialog(QDialog):
         ignore_in.addWidget(btn_add_ignore)
         rules_layout.addLayout(ignore_in)
         self.list_ignore = QListWidget()
-        self.list_ignore.setMaximumHeight(90)
-        rules_layout.addWidget(self.list_ignore)
+        self.list_ignore.setMinimumHeight(80)
+        rules_layout.addWidget(self.list_ignore, 1)
         btn_del_ignore = QPushButton(tr("remove_btn"))
         btn_del_ignore.clicked.connect(lambda: self._remove_selected(self.list_ignore))
         rules_layout.addWidget(btn_del_ignore)
@@ -496,9 +500,6 @@ class SettingsDialog(QDialog):
         self.spin_digest_days.setRange(1, 365)
         self.spin_digest_days.setValue(self.config.digest_days)
         layout.addWidget(self.spin_digest_days)
-        layout.addStretch()
-        people_layout.addStretch()
-        rules_layout.addStretch()
 
     def _add_ignore_rule(self) -> None:
         rule = IgnoreRule(
