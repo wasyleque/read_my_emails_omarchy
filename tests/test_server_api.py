@@ -310,8 +310,8 @@ async def test_server_websocket_events_stream(server_context, tmp_path: Path):
     await client.start_server()
 
     try:
-        # Połączenie WebSocket z tokenem w zapytaniu
-        ws = await client.ws_connect(f"/v1/events?token={token}")
+        # Połączenie WebSocket z tokenem w nagłówku Authorization
+        ws = await client.ws_connect("/v1/events", headers={"Authorization": f"Bearer {token}"})
         assert not ws.closed
 
         # Przygotowanie i wysłanie zdarzenia
@@ -398,5 +398,31 @@ async def test_server_digest_endpoint(server_context):
         assert "period" in data
         assert "topics" in data
         assert isinstance(data["topics"], list)
+    finally:
+        await client.close()
+
+
+@pytest.mark.anyio
+async def test_websocket_rejects_token_in_query_string(server_context, tmp_path: Path):
+    """Token w adresie URL trafiłby do logów/historii — serwer przyjmuje go tylko w nagłówku."""
+    from aiohttp import WSServerHandshakeError
+
+    session = server_context.device_manager.start_pairing_session()
+    _, token = server_context.device_manager.pair_device(session.code, "WsQuery")
+    server = MobileServer(
+        config=server_context.config,
+        store=server_context.store,
+        device_manager=server_context.device_manager,
+        data_dir=tmp_path,
+    )
+    client = TestClient(TestServer(create_app(server.context)))
+    await client.start_server()
+    try:
+        with pytest.raises(WSServerHandshakeError) as exc:
+            await client.ws_connect(f"/v1/events?token={token}")
+        assert exc.value.status == 401
+        ok = await client.ws_connect("/v1/events", headers={"Authorization": f"Bearer {token}"})
+        assert not ok.closed
+        await ok.close()
     finally:
         await client.close()

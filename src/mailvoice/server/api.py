@@ -167,9 +167,7 @@ async def auth_middleware(
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
-    elif request.path == "/v1/events" and "token" in request.query:
-        # Dla WebSocket zezwalamy na przekazanie tokenu w query string
-        token = request.query.get("token", "").strip()
+    # Token WYŁĄCZNIE w nagłówku: adres URL (z ?token=) trafia do logów, historii i proxy.
 
     if not token:
         return web.json_response(

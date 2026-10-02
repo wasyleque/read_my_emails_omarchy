@@ -47,10 +47,8 @@ Wszystkie pozostałe endpointy REST wymagają nagłówka HTTP:
 ```http
 Authorization: Bearer <TOKEN_32_BAJTY_HEX>
 ```
-Dla połączenia WebSocket token może zostać przekazany jako parametr w zapytaniu:
-```text
-wss://<ip>:<port>/v1/events?token=<TOKEN_32_BAJTY_HEX>
-```
+Dotyczy to także WebSocketu (`/v1/events`): token **wyłącznie w nagłówku** `Authorization`. Przekazanie go w adresie
+(`?token=`) jest odrzucane (`401`), bo adresy trafiają do logów, historii i serwerów pośredniczących.
 Brak tokenu, token błędny lub odwołany skutkuje kodem HTTP `401 Unauthorized`.
 
 ---
@@ -268,7 +266,7 @@ Odwołuje token bieżącego urządzenia. Po wywołaniu tego endpointu token staj
 
 ## 5. Strumień zdarzeń w czasie rzeczywistym (WebSocket)
 
-`GET /v1/events?token=<TOKEN>`
+`GET /v1/events` (nagłówek `Authorization: Bearer <TOKEN>`)
 
 Ustanawia dwukierunkowe połączenie WebSocket (z automatycznym heartbeat co 25 s). Serwer przesyła powiadomienia o nowych mailach w czasie rzeczywistym.
 
