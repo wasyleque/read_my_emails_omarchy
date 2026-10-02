@@ -299,6 +299,10 @@ class SettingsDialog(QDialog):
         # VIP
         vip_box = QVBoxLayout()
         vip_box.addWidget(QLabel(tr("step4_vip_label")))
+        lbl_vip_hint = QLabel(tr("vip_hint"))
+        lbl_vip_hint.setWordWrap(True)
+        lbl_vip_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        vip_box.addWidget(lbl_vip_hint)
         vip_in = QHBoxLayout()
         self.txt_vip = QLineEdit()
         btn_add_vip = QPushButton(tr("add_btn"))

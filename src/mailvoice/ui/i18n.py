@@ -54,6 +54,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "threshold_balanced": "Zrównoważenie (domyślnie)",
         "threshold_strict": "Tylko najważniejsze",
         "step4_vip_label": "Ważni nadawcy (VIP) — zawsze powiadamiaj:",
+        "vip_hint": (
+            "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
+        ),
         "step4_keywords_label": "Ważne słowa kluczowe w treści lub temacie:",
         "add_btn": "Dodaj",
         "remove_btn": "Usuń",
@@ -250,6 +253,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "threshold_balanced": "Balanced (default)",
         "threshold_strict": "Strict (critical only)",
         "step4_vip_label": "Important senders (VIP) — always notify:",
+        "vip_hint": (
+            "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
+        ),
         "step4_keywords_label": "Important keywords in subject or body:",
         "add_btn": "Add",
         "remove_btn": "Remove",

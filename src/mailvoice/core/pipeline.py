@@ -190,6 +190,11 @@ def load_pending_backlog(store: Store, account: str | None = None) -> list[Pendi
     ]
 
 
+def _rule_bonus(rule_res, risk: str) -> int:
+    """Premia z reguł; „znany korespondent” NIE liczy się przy podejrzanym mailu (podszywanie)."""
+    return rule_res.score_bonus - (rule_res.known_bonus if risk != "low" else 0)
+
+
 def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
     """Wykonuje pojedynczy cyklu sprawdzania poczty dla wszystkich skonfigurowanych kont.
 
@@ -253,7 +258,12 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
             if err_msg != sent_folder_err:
                 result.errors.append(err_msg)
 
+        known_addresses, known_domains = deps.store.get_correspondents(
+            exclude={a.lower() for a in my_addresses}
+        )
         rules = Rules(
+            known_addresses=known_addresses,
+            known_domains=known_domains,
             vip_senders=tuple(deps.config.vip_senders),
             keywords=tuple(deps.config.keywords),
             blocked_senders=tuple(deps.config.blocked_senders),
@@ -346,7 +356,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                             f"Powody: {reasons_text}. "
                             "Nie klikaj w linki ani nie otwieraj załączników."
                         )
-                        final_importance = min(3, rule_res.score_bonus)
+                        final_importance = min(3, _rule_bonus(rule_res, risk_assessment.risk))
                         processed = ProcessedMail(
                             account=account.name,
                             folder=folder,
@@ -442,7 +452,10 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         )
                         continue
 
-                    final_importance = max(0, min(10, analysis.importance + rule_res.score_bonus))
+                    final_importance = max(
+                        0,
+                        min(10, analysis.importance + _rule_bonus(rule_res, risk_assessment.risk)),
+                    )
                     analysis_reason = analysis.reason
                     summary = ""
                     if is_medium_risk:
@@ -574,7 +587,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         f"Powody: {reasons_text}. "
                         "Nie klikaj w linki ani nie otwieraj załączników."
                     )
-                    final_importance = min(3, rule_res.score_bonus)
+                    final_importance = min(3, _rule_bonus(rule_res, risk_assessment.risk))
                     processed = ProcessedMail(
                         account=account.name,
                         folder=folder,
@@ -668,7 +681,10 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     )
                     break
 
-                final_importance = max(0, min(10, analysis.importance + rule_res.score_bonus))
+                final_importance = max(
+                    0,
+                    min(10, analysis.importance + _rule_bonus(rule_res, risk_assessment.risk)),
+                )
                 deps.store.mark_seen(
                     account.name,
                     folder,

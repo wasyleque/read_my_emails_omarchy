@@ -546,6 +546,30 @@ class Store:
         cursor.execute(query, params)
         return [MailIndexRecord(*row) for row in cursor.fetchall()]
 
+    def get_correspondents(
+        self, days: int = 365, exclude: set[str] | None = None
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Adresy i domeny firmowe, do których Ty pisałeś (wiadomości wychodzące z indeksu)."""
+        from email.utils import getaddresses
+
+        from mailvoice.core.rules import FREEMAIL_DOMAINS
+
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        rows = self.connection.execute(
+            "SELECT recipients FROM mail_index "
+            "WHERE direction = 'out' AND (date IS NULL OR date >= ?)",
+            (since,),
+        ).fetchall()
+        mine = {a.lower() for a in (exclude or set())}
+        addresses: set[str] = set()
+        for (recipients,) in rows:
+            for _name, addr in getaddresses([recipients or ""]):
+                addr = addr.strip().lower()
+                if addr and "@" in addr and addr not in mine:
+                    addresses.add(addr)
+        domains = {a.rsplit("@", 1)[1] for a in addresses} - FREEMAIL_DOMAINS
+        return frozenset(addresses), frozenset(domains)
+
     def purge_older_than(self, days: int, now: datetime | None = None) -> int:
         """Usuwa wpisy indeksu starsze niż podana liczba dni."""
         if days < 1:

@@ -104,3 +104,32 @@ def test_store_memory_usable_from_another_thread():
     t.start()
     t.join()
     assert errors == [] and store.is_seen("a", "INBOX", 1, 1, None)
+
+
+def test_correspondents_from_sent_mail_exclude_freemail_domains_and_own_addresses():
+    from mailvoice.core.store import MailIndexRecord
+
+    store = Store()
+    recipients = "Sekretariat <sekretariat@firma.pl>, jan@gmail.com, ja@o2.pl"
+    store.save_mail_index(
+        MailIndexRecord(
+            account="a",
+            folder="Sent",
+            uidvalidity=1,
+            uid=1,
+            message_id="<1@x>",
+            thread_key="t",
+            date="2999-01-01T00:00:00+00:00",
+            sender="ja@o2.pl",
+            recipients=recipients,
+            subject="s",
+            importance=0,
+            why="",
+            summary="",
+            direction="out",
+        )
+    )
+    addresses, domains = store.get_correspondents(exclude={"ja@o2.pl"})
+    assert "sekretariat@firma.pl" in addresses and "jan@gmail.com" in addresses
+    assert "ja@o2.pl" not in addresses
+    assert domains == frozenset({"firma.pl"})  # gmail.com to domena publiczna, nie firmowa

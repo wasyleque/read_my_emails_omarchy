@@ -462,6 +462,10 @@ class ImportancePage(QWizardPage):
         # VIP
         vip_box = QVBoxLayout()
         vip_box.addWidget(QLabel(tr("step4_vip_label")))
+        lbl_vip_hint = QLabel(tr("vip_hint"))
+        lbl_vip_hint.setWordWrap(True)
+        lbl_vip_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        vip_box.addWidget(lbl_vip_hint)
         vip_input_layout = QHBoxLayout()
         self.txt_vip_input = QLineEdit()
         self.txt_vip_input.setPlaceholderText("szef@firma.pl")

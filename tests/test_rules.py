@@ -154,3 +154,28 @@ def test_reply_detected_via_references_when_in_reply_to_unknown():
     result = evaluate(mail, rules)
     assert result.score_bonus == 3
     assert result.reasons == ("reply_to_sent",)
+
+
+def test_known_correspondent_address_gets_bonus():
+    rules = Rules(known_addresses=frozenset({"anna@firma.pl"}))
+    res = evaluate(MailInfo(sender="Anna K <Anna@Firma.pl>", subject="s", body="b"), rules)
+    assert res.score_bonus == 3 and res.known_bonus == 3
+    assert res.reasons == ("known_correspondent",)
+
+
+def test_known_company_domain_gets_smaller_bonus():
+    rules = Rules(known_domains=frozenset({"firma-przyklad.pl"}))
+    res = evaluate(MailInfo(sender="sekretariat@firma-przyklad.pl", subject="s", body="b"), rules)
+    assert res.score_bonus == 2 and res.reasons == ("known_domain",)
+
+
+def test_unknown_sender_gets_no_known_bonus():
+    rules = Rules(known_addresses=frozenset({"a@x.pl"}), known_domains=frozenset({"x.pl"}))
+    res = evaluate(MailInfo(sender="obcy@inna.pl", subject="s", body="b"), rules)
+    assert res.score_bonus == 0 and res.known_bonus == 0
+
+
+def test_vip_domain_substring_still_works_and_is_not_double_counted():
+    rules = Rules(vip_senders=("@firma-przyklad",), known_domains=frozenset({"firma-przyklad.pl"}))
+    res = evaluate(MailInfo(sender="sekretariat@firma-przyklad.pl", subject="s", body="b"), rules)
+    assert res.score_bonus == 3 and res.reasons == ("vip_sender",) and res.known_bonus == 0
