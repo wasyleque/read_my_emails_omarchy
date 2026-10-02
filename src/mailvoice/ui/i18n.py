@@ -140,6 +140,36 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_analysis": "Ocenianie ważności",
         "tab_notifications": "Głos i powiadomienia",
         "tab_ollama": "Model AI (Ollama)",
+        "ollama_detect_btn": "Wykryj modele",
+        "ollama_detecting": "Szukam serwera Ollama i pobieram listę modeli...",
+        "ollama_detected_server": "Znaleziono serwer ({source}) — {count} modeli",
+        "ollama_source_local": "ten komputer",
+        "ollama_source_lan": "sieć lokalna",
+        "ollama_not_detected": "Nie znaleziono działającego serwera Ollama.",
+        "ollama_install_guide": (
+            "Zainstaluj i uruchom Ollamę ze strony https://ollama.com. "
+            "W razie potrzeby podaj adres serwera w Zaawansowanych poniżej."
+        ),
+        "ollama_general_model_label": "Model do analizy poczty:",
+        "ollama_polish_model_label": "Model do języka polskiego:",
+        "ollama_same_as_general": "taki sam jak ogólny",
+        "ollama_recommended_tag": " (zalecany)",
+        "ollama_recommended_pl_tag": " (zalecany do PL)",
+        "ollama_show_all_models": "Pokaż wszystkie modele",
+        "ollama_cloud_excluded_hint": (
+            "Modele chmurowe (:cloud) są wykluczone, ponieważ przesyłają dane poza Twój serwer."
+        ),
+        "ollama_model_missing_tag": "niezainstalowany",
+        "ollama_model_missing_warn": (
+            "⚠ Wybrany model nie jest zainstalowany na serwerze Ollama. "
+            "Analiza maili może zakończyć się błędem."
+        ),
+        "ollama_model_missing_confirm": (
+            "Wybrany model '{model}' nie jest zainstalowany na serwerze Ollama. "
+            "Czy na pewno chcesz zapisać tę konfigurację?"
+        ),
+        "ollama_check_btn": "Sprawdź model",
+        "ollama_checking": "Wysyłam zapytanie testowe do modelu...",
         "btn_save": "Zapisz zmiany",
         "btn_close": "Zamknij",
         "save_success": "Ustawienia zostały pomyślnie zapisane.",
@@ -333,6 +363,36 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_analysis": "Evaluation Rules",
         "tab_notifications": "Voice & Notifications",
         "tab_ollama": "AI Model (Ollama)",
+        "ollama_detect_btn": "Detect Models",
+        "ollama_detecting": "Searching for Ollama server and fetching model list...",
+        "ollama_detected_server": "Found server ({source}) — {count} models",
+        "ollama_source_local": "this computer",
+        "ollama_source_lan": "local network",
+        "ollama_not_detected": "No running Ollama server found.",
+        "ollama_install_guide": (
+            "Install and start Ollama from https://ollama.com. "
+            "If needed, specify server URLs in Advanced below."
+        ),
+        "ollama_general_model_label": "Mail analysis model:",
+        "ollama_polish_model_label": "Polish language model:",
+        "ollama_same_as_general": "same as general",
+        "ollama_recommended_tag": " (recommended)",
+        "ollama_recommended_pl_tag": " (recommended for PL)",
+        "ollama_show_all_models": "Show all models",
+        "ollama_cloud_excluded_hint": (
+            "Cloud models (:cloud) are excluded because they send data outside your server."
+        ),
+        "ollama_model_missing_tag": "not installed",
+        "ollama_model_missing_warn": (
+            "⚠ Selected model is not installed on the Ollama server. "
+            "Mail analysis may fail."
+        ),
+        "ollama_model_missing_confirm": (
+            "Selected model '{model}' is not installed on the Ollama server. "
+            "Are you sure you want to save this configuration?"
+        ),
+        "ollama_check_btn": "Test Model",
+        "ollama_checking": "Sending test query to model...",
         "btn_save": "Save Changes",
         "btn_close": "Close",
         "save_success": "Settings saved successfully.",

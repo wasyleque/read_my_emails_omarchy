@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -26,7 +26,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, save_config
+from mailvoice.core.ollama_models import (
+    CheckResult,
+    Detection,
+    check_model,
+    describe_selection,
+    detect_models,
+    get_available_models,
+    suggest_models,
+)
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
 from mailvoice.ui import theme
@@ -73,6 +83,55 @@ def detect_provider_id(acc: AccountConfig) -> str:
     return "other"
 
 
+class OllamaDetectWorker(QThread):
+    """Wątek wykrywania serwera Ollama i pobierania listy modeli."""
+
+    finished_detection = Signal(object)
+
+    def __init__(
+        self,
+        local_url: str,
+        lan_url: str,
+        fetch_fn: Callable[[str], list[str]] | None = None,
+    ) -> None:
+        super().__init__()
+        self.local_url = local_url
+        self.lan_url = lan_url
+        self.fetch_fn = fetch_fn
+
+    def run(self) -> None:
+        detection = detect_models(self.local_url, self.lan_url, fetch=self.fetch_fn)
+        self.finished_detection.emit(detection)
+
+
+class OllamaCheckWorker(QThread):
+    """Wątek wysyłający zapytanie testowe do wybranego modelu Ollama."""
+
+    finished_check = Signal(object)
+
+    def __init__(
+        self,
+        cfg: OllamaConfig,
+        model: str,
+        client_factory: Callable[[OllamaConfig], OllamaClient] | None = None,
+        lang: str = "pl",
+    ) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.model = model
+        self.client_factory = client_factory
+        self.lang = lang
+
+    def run(self) -> None:
+        result = check_model(
+            self.cfg,
+            self.model,
+            client_factory=self.client_factory,
+            lang=self.lang,
+        )
+        self.finished_check.emit(result)
+
+
 class SettingsDialog(QDialog):
     """Okno dialogowe konfiguracji aplikacji MailVoice."""
 
@@ -96,9 +155,15 @@ class SettingsDialog(QDialog):
         self.deleted_account_names: list[str] = []
         self._current_account_index: int = -1
         self._is_updating_form: bool = False
+        self.ollama_detect_worker: OllamaDetectWorker | None = None
+        self.ollama_check_worker: OllamaCheckWorker | None = None
+        self.ollama_detection: Detection | None = None
+        self._ollama_fetch_fn: Callable[[str], list[str]] | None = None
+        self._ollama_client_factory: Callable[[OllamaConfig], OllamaClient] | None = None
+        self._ollama_detected_once: bool = False
 
         self.setWindowTitle(tr("settings_title"))
-        self.resize(780, 520)
+        self.resize(840, 540)
         self._init_ui()
         self._load_values()
 
@@ -126,6 +191,8 @@ class SettingsDialog(QDialog):
         self.tab_ollama = QWidget()
         self._init_ollama_tab()
         self.tabs.addTab(self.tab_ollama, tr("tab_ollama"))
+
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         layout.addWidget(self.tabs)
 
@@ -377,23 +444,92 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.lbl_voice_status)
         layout.addStretch()
 
+    def _on_tab_changed(self, index: int) -> None:
+        # Zakładka 4 (index 3) to Model AI (Ollama)
+        if index == 3 and not self._ollama_detected_once:
+            self._on_detect_models()
+
     def _init_ollama_tab(self) -> None:
         layout = QVBoxLayout(self.tab_ollama)
+
+        # 1. Pasek wykrywania modeli
+        detect_layout = QHBoxLayout()
+        self.btn_detect_models = QPushButton(tr("ollama_detect_btn"))
+        self.btn_detect_models.clicked.connect(self._on_detect_models)
+        detect_layout.addWidget(self.btn_detect_models)
+
+        self.lbl_detect_status = QLabel("")
+        self.lbl_detect_status.setWordWrap(True)
+        detect_layout.addWidget(self.lbl_detect_status)
+        detect_layout.addStretch()
+        layout.addLayout(detect_layout)
+
+        # Instrukcja instalacji / pomocy gdy brak serwera
+        self.lbl_ollama_guide = QLabel(tr("ollama_install_guide"))
+        self.lbl_ollama_guide.setWordWrap(True)
+        self.lbl_ollama_guide.setStyleSheet(
+            f"color: {theme.c('text')}; background: {theme.c('guide_bg')}; "
+            "padding: 8px; border-radius: 4px;"
+        )
+        self.lbl_ollama_guide.setVisible(False)
+        layout.addWidget(self.lbl_ollama_guide)
+
+        # 2. Formularz wyboru modeli
         form = QFormLayout()
 
-        self.txt_model = QLineEdit()
-        form.addRow(tr("step3_model_label"), self.txt_model)
+        # Model ogólny
+        self.cb_model = QComboBox()
+        self.cb_model.currentIndexChanged.connect(self._on_model_selection_changed)
+        form.addRow(tr("ollama_general_model_label"), self.cb_model)
 
+        # Ostrzeżenie o braku modelu
+        self.lbl_model_warning = QLabel("")
+        self.lbl_model_warning.setWordWrap(True)
+        self.lbl_model_warning.setStyleSheet(f"color: {theme.c('warn')}; font-size: 11px;")
+        self.lbl_model_warning.setVisible(False)
+        form.addRow("", self.lbl_model_warning)
+
+        # Model do języka polskiego
+        self.cb_polish_model = QComboBox()
+        form.addRow(tr("ollama_polish_model_label"), self.cb_polish_model)
+
+        # Checkbox "Pokaż wszystkie modele"
+        self.chk_all_models = QCheckBox(tr("ollama_show_all_models"))
+        self.chk_all_models.setChecked(False)
+        self.chk_all_models.toggled.connect(self._repopulate_model_combos)
+        form.addRow("", self.chk_all_models)
+
+        # Informacja o wykluczeniu modeli chmurowych
+        self.lbl_cloud_hint = QLabel(tr("ollama_cloud_excluded_hint"))
+        self.lbl_cloud_hint.setWordWrap(True)
+        self.lbl_cloud_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        form.addRow("", self.lbl_cloud_hint)
+
+        layout.addLayout(form)
+
+        # 3. Test modelu
+        check_layout = QHBoxLayout()
+        self.btn_check_model = QPushButton(tr("ollama_check_btn"))
+        self.btn_check_model.clicked.connect(self._on_check_model)
+        check_layout.addWidget(self.btn_check_model)
+
+        self.lbl_check_result = QLabel("")
+        self.lbl_check_result.setWordWrap(True)
+        check_layout.addWidget(self.lbl_check_result)
+        check_layout.addStretch()
+        layout.addLayout(check_layout)
+
+        # 4. Sekcja zaawansowana (URL-e)
         self.adv_ollama = QGroupBox(tr("step3_advanced_url"))
         self.adv_ollama.setCheckable(True)
         self.adv_ollama.setChecked(False)
         adv_form = QFormLayout(self.adv_ollama)
+
         self.txt_local_url = QLineEdit()
         self.txt_lan_url = QLineEdit()
         adv_form.addRow("Local URL:", self.txt_local_url)
         adv_form.addRow("LAN URL:", self.txt_lan_url)
 
-        layout.addLayout(form)
         layout.addWidget(self.adv_ollama)
         layout.addStretch()
 
@@ -457,9 +593,9 @@ class SettingsDialog(QDialog):
             self.rb_beep.setChecked(True)
 
         # Ollama
-        self.txt_model.setText(self.config.ollama.model)
         self.txt_local_url.setText(self.config.ollama.local_url)
         self.txt_lan_url.setText(self.config.ollama.lan_url)
+        self._repopulate_model_combos()
 
     def _load_draft_to_form(self, draft: AccountDraft) -> None:
         self._is_updating_form = True
@@ -538,9 +674,13 @@ class SettingsDialog(QDialog):
         draft = self.account_drafts[index]
         display_name = draft.name.strip() if draft.name.strip() else tr("new_account_label")
         provider = get_provider_by_id(draft.provider_id)
+        if draft.provider_id == "other":
+            prov_name = "Własny IMAP" if get_language() == "pl" else "Custom IMAP"
+        else:
+            prov_name = provider.display_name.split(" (")[0].split(" /")[0]
         has_pwd = (draft.new_password is not None) or draft.has_stored_password
         status_text = tr("acc_status_pwd_saved") if has_pwd else tr("acc_status_no_pwd")
-        item.setText(f"{display_name}\n{provider.display_name} • {status_text}")
+        item.setText(f"{display_name}\n{prov_name} • {status_text}")
 
     def _update_password_status_label(self, draft: AccountDraft) -> None:
         if draft.new_password:
@@ -796,6 +936,216 @@ class SettingsDialog(QDialog):
             self.lbl_voice_status.setStyleSheet(f"color: {theme.c('error')};")
             self.lbl_voice_status.setText(str(exc))
 
+    def _on_detect_models(self) -> None:
+        if self.ollama_detect_worker and self.ollama_detect_worker.isRunning():
+            return
+
+        self.btn_detect_models.setEnabled(False)
+        self.lbl_detect_status.setStyleSheet(f"color: {theme.c('muted')};")
+        self.lbl_detect_status.setText(tr("ollama_detecting"))
+        self.lbl_ollama_guide.setVisible(False)
+
+        local_url = self.txt_local_url.text().strip() or self.config.ollama.local_url
+        lan_url = self.txt_lan_url.text().strip() or self.config.ollama.lan_url
+
+        self.ollama_detect_worker = OllamaDetectWorker(
+            local_url=local_url,
+            lan_url=lan_url,
+            fetch_fn=self._ollama_fetch_fn,
+        )
+        self.ollama_detect_worker.finished_detection.connect(self._on_detection_finished)
+        self.ollama_detect_worker.start()
+
+    def _on_detection_finished(self, detection: Detection) -> None:
+        self._ollama_detected_once = True
+        self.ollama_detection = detection
+        self.btn_detect_models.setEnabled(True)
+
+        if detection.models:
+            source_name = (
+                tr("ollama_source_local")
+                if detection.source == "local"
+                else tr("ollama_source_lan")
+            )
+            self.lbl_detect_status.setStyleSheet(f"color: {theme.c('ok')};")
+            self.lbl_detect_status.setText(
+                tr("ollama_detected_server", source=source_name, count=len(detection.models))
+            )
+            self.lbl_ollama_guide.setVisible(False)
+        else:
+            self.lbl_detect_status.setStyleSheet(f"color: {theme.c('warn')};")
+            self.lbl_detect_status.setText(tr("ollama_not_detected"))
+            self.lbl_ollama_guide.setVisible(True)
+            self.adv_ollama.setChecked(True)
+
+        self._repopulate_model_combos()
+
+    def _repopulate_model_combos(self) -> None:
+        current_general = (
+            self.cb_model.currentData()
+            or self.cb_model.currentText()
+            or self.config.ollama.model
+        )
+        current_polish = self.cb_polish_model.currentData()
+        if current_polish is None and self.cb_polish_model.currentIndex() > 0:
+            current_polish = self.cb_polish_model.currentText()
+        if current_polish is None:
+            current_polish = self.config.ollama.polish_model or ""
+
+        installed = self.ollama_detection.models if self.ollama_detection else []
+        show_all = self.chk_all_models.isChecked()
+        available = get_available_models(installed, show_all=show_all)
+        suggest = suggest_models(installed)
+
+        self.cb_model.blockSignals(True)
+        self.cb_polish_model.blockSignals(True)
+        try:
+            self.cb_model.clear()
+            self.cb_polish_model.clear()
+
+            # 1. Model ogólny
+            for m in available:
+                if suggest.general and m == suggest.general:
+                    label = f"{m} {tr('ollama_recommended_tag')}"
+                else:
+                    label = m
+                self.cb_model.addItem(label, userData=m)
+
+            if current_general:
+                status = (
+                    describe_selection(current_general, installed)
+                    if self.ollama_detection
+                    else "ok"
+                )
+                has_item = any(
+                    self.cb_model.itemData(i) == current_general
+                    for i in range(self.cb_model.count())
+                )
+                if not has_item:
+                    if status == "missing":
+                        label = f"{current_general} {tr('ollama_model_missing_tag')}"
+                    else:
+                        label = current_general
+                    self.cb_model.addItem(label, userData=current_general)
+
+            target_idx = -1
+            for i in range(self.cb_model.count()):
+                if self.cb_model.itemData(i) == current_general:
+                    target_idx = i
+                    break
+            if target_idx >= 0:
+                self.cb_model.setCurrentIndex(target_idx)
+            elif self.cb_model.count() > 0:
+                self.cb_model.setCurrentIndex(0)
+
+            # 2. Model do języka polskiego
+            self.cb_polish_model.addItem(tr("ollama_same_as_general"), userData="")
+
+            for m in available:
+                if suggest.polish and m == suggest.polish:
+                    label = f"{m} {tr('ollama_recommended_pl_tag')}"
+                else:
+                    label = m
+                self.cb_polish_model.addItem(label, userData=m)
+
+            if current_polish and current_polish != current_general:
+                status_pl = (
+                    describe_selection(current_polish, installed)
+                    if self.ollama_detection
+                    else "ok"
+                )
+                has_item_pl = any(
+                    self.cb_polish_model.itemData(i) == current_polish
+                    for i in range(self.cb_polish_model.count())
+                )
+                if not has_item_pl:
+                    if status_pl == "missing":
+                        label = f"{current_polish} {tr('ollama_model_missing_tag')}"
+                    else:
+                        label = current_polish
+                    self.cb_polish_model.addItem(label, userData=current_polish)
+
+            target_pl_idx = 0
+            if current_polish and current_polish != current_general:
+                for i in range(self.cb_polish_model.count()):
+                    if self.cb_polish_model.itemData(i) == current_polish:
+                        target_pl_idx = i
+                        break
+            self.cb_polish_model.setCurrentIndex(target_pl_idx)
+        finally:
+            self.cb_model.blockSignals(False)
+            self.cb_polish_model.blockSignals(False)
+
+        self._on_model_selection_changed()
+
+    def _on_model_selection_changed(self) -> None:
+        selected = self.cb_model.currentData() or self.cb_model.currentText()
+        if not selected or not self.ollama_detection or not self.ollama_detection.models:
+            self.lbl_model_warning.setVisible(False)
+            return
+
+        status = describe_selection(selected, self.ollama_detection.models)
+        if status == "missing":
+            self.lbl_model_warning.setText(tr("ollama_model_missing_warn", model=selected))
+            self.lbl_model_warning.setVisible(True)
+        else:
+            self.lbl_model_warning.setVisible(False)
+
+    def _on_check_model(self) -> None:
+        if self.ollama_check_worker and self.ollama_check_worker.isRunning():
+            return
+
+        selected_model = self.cb_model.currentData() or self.cb_model.currentText()
+        if not selected_model:
+            return
+
+        self.btn_check_model.setEnabled(False)
+        self.lbl_check_result.setStyleSheet(f"color: {theme.c('muted')};")
+        self.lbl_check_result.setText(tr("ollama_checking"))
+
+        prefer = (
+            "local"
+            if (self.ollama_detection and self.ollama_detection.local_ok)
+            else (
+                "lan"
+                if (self.ollama_detection and self.ollama_detection.lan_ok)
+                else self.config.ollama.prefer
+            )
+        )
+        cfg = OllamaConfig(
+            lan_url=self.txt_lan_url.text().strip() or self.config.ollama.lan_url,
+            local_url=self.txt_local_url.text().strip() or self.config.ollama.local_url,
+            model=selected_model,
+            polish_model=selected_model,
+            prefer=prefer,
+            timeout_s=15.0,
+        )
+
+        lang = get_language()
+        self.ollama_check_worker = OllamaCheckWorker(
+            cfg=cfg,
+            model=selected_model,
+            client_factory=self._ollama_client_factory,
+            lang=lang,
+        )
+        self.ollama_check_worker.finished_check.connect(self._on_check_model_finished)
+        self.ollama_check_worker.start()
+
+    def _on_check_model_finished(self, result: CheckResult) -> None:
+        self.btn_check_model.setEnabled(True)
+        if result.ok:
+            self.lbl_check_result.setStyleSheet(f"color: {theme.c('ok')};")
+        else:
+            self.lbl_check_result.setStyleSheet(f"color: {theme.c('error')};")
+        self.lbl_check_result.setText(result.message)
+
+    def closeEvent(self, event) -> None:
+        if self.ollama_detect_worker and self.ollama_detect_worker.isRunning():
+            self.ollama_detect_worker.wait(1000)
+        if self.ollama_check_worker and self.ollama_check_worker.isRunning():
+            self.ollama_check_worker.wait(1000)
+        super().closeEvent(event)
+
     def _on_save(self) -> None:
         if 0 <= self._current_account_index < len(self.account_drafts):
             self._save_form_to_draft(self._current_account_index)
@@ -875,12 +1225,47 @@ class SettingsDialog(QDialog):
         vip_senders = [self.list_vip.item(i).text() for i in range(self.list_vip.count())]
         keywords = [self.list_kw.item(i).text() for i in range(self.list_kw.count())]
 
+        # Walidacja i konfiguracja Ollama
+        selected_model = (
+            self.cb_model.currentData()
+            or self.cb_model.currentText()
+            or self.config.ollama.model
+        )
+        selected_polish_data = self.cb_polish_model.currentData()
+        if not selected_polish_data:
+            selected_polish = selected_model
+        else:
+            selected_polish = selected_polish_data
+
+        if self.ollama_detection is not None and (
+            self.ollama_detection.local_ok or self.ollama_detection.lan_ok
+        ):
+            status = describe_selection(selected_model, self.ollama_detection.models)
+            if status == "missing":
+                ans = QMessageBox.question(
+                    self,
+                    "MailVoice",
+                    tr("ollama_model_missing_confirm", model=selected_model),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if ans != QMessageBox.StandardButton.Yes:
+                    self.tabs.setCurrentIndex(3)
+                    return
+
+        prefer = (
+            ("local" if self.ollama_detection.local_ok else "lan")
+            if self.ollama_detection is not None
+            else self.config.ollama.prefer
+        )
+
         ollama_cfg = OllamaConfig(
             lan_url=self.txt_lan_url.text().strip() or self.config.ollama.lan_url,
             local_url=self.txt_local_url.text().strip() or self.config.ollama.local_url,
-            model=self.txt_model.text().strip() or self.config.ollama.model,
-            polish_model=self.config.ollama.polish_model,
-            prefer=self.config.ollama.prefer,
+            model=selected_model,
+            polish_model=selected_polish,
+            prefer=prefer,
+            timeout_s=self.config.ollama.timeout_s,
         )
 
         new_config = AppConfig(

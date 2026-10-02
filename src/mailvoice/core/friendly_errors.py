@@ -103,6 +103,10 @@ def format_friendly_error(exc: Any, lang: str = "pl") -> str:
             "network is unreachable",
             "connection reset",
             "host is down",
+            "połączenie odrzucone",
+            "brak serwera",
+            "przekroczono czas oczekiwania",
+            "nie można połączyć",
         )
     ):
         if is_pl:

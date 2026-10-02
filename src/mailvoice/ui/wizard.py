@@ -29,7 +29,7 @@ from mailvoice.core.analyzer import fetch_ollama_models
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig
 from mailvoice.core.friendly_errors import format_friendly_error_ex
 from mailvoice.core.imap_fetch import ImapToolsClient
-from mailvoice.core.ollama_models import suggest_models
+from mailvoice.core.ollama_models import detect_models, suggest_models
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
 from mailvoice.ui import theme
@@ -370,10 +370,12 @@ class OllamaPage(QWizardPage):
         self._detect_ollama()
 
     def _detect_ollama(self) -> None:
-        local_models = self._fetch_models(self.txt_local_url.text().strip())
-        self._detected_local = bool(local_models)
-        models = local_models or self._fetch_models(self.txt_lan_url.text().strip())
-        self._suggestion = suggest_models(models)
+        local_url = self.txt_local_url.text().strip()
+        lan_url = self.txt_lan_url.text().strip()
+        detection = detect_models(local_url, lan_url, fetch=self._fetch_models)
+        self._detected_local = detection.local_ok
+        self._detection = detection
+        self._suggestion = suggest_models(detection.models)
 
         self.cb_model.clear()
         if self._suggestion.choices:
@@ -397,12 +399,16 @@ class OllamaPage(QWizardPage):
         model = self.cb_model.currentText() or "qwen3:8b"
         suggestion = getattr(self, "_suggestion", None)
         polish = (suggestion.polish if suggestion else None) or model
+        detection = getattr(self, "_detection", None)
+        detected_local = (
+            detection.local_ok if detection else getattr(self, "_detected_local", False)
+        )
         return OllamaConfig(
             lan_url=self.txt_lan_url.text().strip(),
             local_url=self.txt_local_url.text().strip(),
             model=model,
             polish_model=polish,
-            prefer="local" if getattr(self, "_detected_local", False) else "lan",
+            prefer="local" if detected_local else "lan",
         )
 
 
