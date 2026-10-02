@@ -42,6 +42,7 @@ class AppConfig:
     blocked_senders: List[str] = field(default_factory=list)
     interval_minutes: int = 10
     notify_mode: str = "beep"  # 'beep' or 'ask'
+    auto_vip: str = "bonus"  # osoby z Wysłanych: off | bonus | vip
     voice_output: str = "auto"  # gdzie czytać powiadomienia: auto|computer|phone|both
     beep_repeat_minutes: int = 5
     ask_retry_minutes: int = 15
@@ -93,6 +94,9 @@ class AppConfig:
         if server.max_devices < 1:
             raise ValueError(f"Server max_devices must be >= 1, got: {server.max_devices}")
 
+        auto_vip = d.get("auto_vip", "bonus")
+        if auto_vip not in ("off", "bonus", "vip"):
+            raise ValueError(f"Invalid auto_vip: {auto_vip}")
         voice_output = d.get("voice_output", "auto")
         if voice_output not in ("auto", "computer", "phone", "both"):
             raise ValueError(f"Invalid voice_output: {voice_output}")
@@ -141,6 +145,7 @@ class AppConfig:
             interval_minutes=interval_minutes,
             notify_mode=notify_mode,
             voice_output=voice_output,
+            auto_vip=auto_vip,
             beep_repeat_minutes=d.get("beep_repeat_minutes", 5),
             ask_retry_minutes=ask_retry_minutes,
             importance_threshold=importance_threshold,

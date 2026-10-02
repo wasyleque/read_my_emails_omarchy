@@ -426,12 +426,63 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(lists_layout)
 
+        # Osoby, do których piszesz (automatycznie z folderu Wysłane)
+        layout.addWidget(QLabel(tr("auto_vip_label")))
+        self.cb_auto_vip = QComboBox()
+        self.cb_auto_vip.addItem(tr("auto_vip_off"), "off")
+        self.cb_auto_vip.addItem(tr("auto_vip_bonus"), "bonus")
+        self.cb_auto_vip.addItem(tr("auto_vip_vip"), "vip")
+        layout.addWidget(self.cb_auto_vip)
+        lbl_auto_hint = QLabel(tr("auto_vip_hint"))
+        lbl_auto_hint.setWordWrap(True)
+        lbl_auto_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        layout.addWidget(lbl_auto_hint)
+        known_row = QHBoxLayout()
+        self.lbl_known_people = QLabel("")
+        known_row.addWidget(self.lbl_known_people)
+        btn_show_known = QPushButton(tr("auto_vip_show"))
+        btn_show_known.clicked.connect(self._show_known_people)
+        known_row.addWidget(btn_show_known)
+        known_row.addStretch()
+        layout.addLayout(known_row)
+        self._refresh_known_people()
+
         # Okres podsumowania tematów (dni)
         layout.addWidget(QLabel(tr("settings_digest_days_label")))
         self.spin_digest_days = QSpinBox()
         self.spin_digest_days.setRange(1, 365)
         self.spin_digest_days.setValue(self.config.digest_days)
         layout.addWidget(self.spin_digest_days)
+
+    def _known_people(self) -> tuple[frozenset[str], frozenset[str]]:
+        """Adresy i domeny firmowe z Twoich wysłanych maili (tylko odczyt lokalnej bazy)."""
+        from mailvoice.core.store import Store
+
+        try:
+            store = Store(self.data_dir / "mailvoice.db")
+            try:
+                mine = {a.username.lower() for a in self.config.accounts if a.username}
+                return store.get_correspondents(exclude=mine)
+            finally:
+                store.close()
+        except Exception:  # noqa: BLE001 — brak bazy/wysłanych nie może psuć okna ustawień
+            return frozenset(), frozenset()
+
+    def _refresh_known_people(self) -> None:
+        addresses, domains = self._known_people()
+        self.lbl_known_people.setText(
+            tr("auto_vip_count", addresses=len(addresses), domains=len(domains))
+        )
+
+    def _show_known_people(self) -> None:
+        addresses, domains = self._known_people()
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("MailVoice")
+        box.setText(tr("auto_vip_count", addresses=len(addresses), domains=len(domains)))
+        listing = "\n".join(sorted(addresses)[:500])
+        box.setDetailedText(listing or "-")
+        box.exec()
 
     def _init_voice_tab(self) -> None:
         layout = QVBoxLayout(self.tab_voice)
@@ -765,6 +816,7 @@ class SettingsDialog(QDialog):
         idx = self.cb_interval.findData(self.config.interval_minutes)
         if idx >= 0:
             self.cb_interval.setCurrentIndex(idx)
+        self.cb_auto_vip.setCurrentIndex(max(self.cb_auto_vip.findData(self.config.auto_vip), 0))
         idx = self.cb_voice_output.findData(self.config.voice_output)
         self.cb_voice_output.setCurrentIndex(max(idx, 0))
         if self.config.notify_mode == "ask":
@@ -1463,6 +1515,7 @@ class SettingsDialog(QDialog):
             interval_minutes=self.cb_interval.currentData() or 10,
             notify_mode="ask" if self.rb_ask.isChecked() else "beep",
             voice_output=self.cb_voice_output.currentData() or "auto",
+            auto_vip=self.cb_auto_vip.currentData() or "bonus",
             beep_repeat_minutes=self.config.beep_repeat_minutes,
             ask_retry_minutes=self.config.ask_retry_minutes,
             importance_threshold=self.slider.value(),

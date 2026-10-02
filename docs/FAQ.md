@@ -32,7 +32,8 @@ Wybierz dostawcę „O2 Poczta”. Loginem jest **pełny adres e-mail**, a w ust
 ## Dlaczego mail nie jest oznaczony jako ważny?
 Ważność to ocena modelu (0–10) plus premie z reguł (VIP, słowa kluczowe, odpowiedź na Twój mail, „znany
 korespondent” — ktoś, komu pisałeś). Mail trafia na listę, gdy suma osiąga próg z suwaka „Jak ostro oceniać”.
-Jeśli ważne maile giną: dodaj nadawcę do VIP, obniż próg albo opisz w polu „co jest dla mnie ważne”, o jaką korespondencję
+Nadawcy z listy VIP oraz (opcjonalnie) osoby, do których piszesz, mają gwarancję powiadomienia
+(poza wiadomościami z sygnałami phishingu). Jeśli ważne maile giną: dodaj nadawcę do VIP, obniż próg albo opisz w polu „co jest dla mnie ważne”, o jaką korespondencję
 chodzi. Zmiana działa na nowe maile (już ocenione nie są przeliczane).
 
 ## Czy w VIP mogę wpisać samą domenę?
@@ -84,7 +85,8 @@ settings.
 ## Why isn't a mail marked as important?
 Importance is the model's score (0–10) plus bonuses from rules (VIP, keywords, replies to your mail, “known
 correspondent” — someone you have written to). A mail is listed when the sum reaches the threshold set by the
-“How strict” slider. If important mail gets missed: add the sender to VIP, lower the threshold, or describe in the
+“How strict” slider. Senders on the VIP list and (optionally) people you write to are guaranteed a notification
+(except for messages with phishing signals). If important mail gets missed: add the sender to VIP, lower the threshold, or describe in the
 “what matters to me” field which correspondence is important. Changes apply to new mail (already-scored mail is not
 re-scored).
 

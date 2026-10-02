@@ -195,6 +195,18 @@ def _rule_bonus(rule_res, risk: str) -> int:
     return rule_res.score_bonus - (rule_res.known_bonus if risk != "low" else 0)
 
 
+def _final_importance(analysis_importance: int, rule_res, assessment, threshold: int) -> int:
+    """Ważność końcowa: model + premie z reguł.
+
+    VIP nie spada poniżej progu, ale TYLKO gdy mail nie ma żadnego sygnału phishingu: nadawca
+    „Szef <szef@firma.pl>” bywa podrobiony, a ocena ryzyka może uznać wyłudzenie za „low”.
+    """
+    value = max(0, min(10, analysis_importance + _rule_bonus(rule_res, assessment.risk)))
+    if rule_res.force_important and assessment.risk == "low" and not assessment.reasons:
+        value = max(value, threshold)
+    return value
+
+
 def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
     """Wykonuje pojedynczy cyklu sprawdzania poczty dla wszystkich skonfigurowanych kont.
 
@@ -264,6 +276,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
         rules = Rules(
             known_addresses=known_addresses,
             known_domains=known_domains,
+            auto_vip=deps.config.auto_vip,
             vip_senders=tuple(deps.config.vip_senders),
             keywords=tuple(deps.config.keywords),
             blocked_senders=tuple(deps.config.blocked_senders),
@@ -452,9 +465,11 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         )
                         continue
 
-                    final_importance = max(
-                        0,
-                        min(10, analysis.importance + _rule_bonus(rule_res, risk_assessment.risk)),
+                    final_importance = _final_importance(
+                        analysis.importance,
+                        rule_res,
+                        risk_assessment,
+                        deps.config.importance_threshold,
                     )
                     analysis_reason = analysis.reason
                     summary = ""
@@ -681,9 +696,11 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     )
                     break
 
-                final_importance = max(
-                    0,
-                    min(10, analysis.importance + _rule_bonus(rule_res, risk_assessment.risk)),
+                final_importance = _final_importance(
+                    analysis.importance,
+                    rule_res,
+                    risk_assessment,
+                    deps.config.importance_threshold,
                 )
                 deps.store.mark_seen(
                     account.name,

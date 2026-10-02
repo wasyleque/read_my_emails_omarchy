@@ -72,6 +72,18 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Dotyczy powiadomień wysyłanych przez program (nowy ważny mail, przypomnienia). "
             "Gdy sam klikniesz „Posłuchaj” na komputerze, zawsze usłyszysz go na komputerze."
         ),
+        "auto_vip_label": "Osoby, do których piszesz (automatycznie z folderu Wysłane):",
+        "auto_vip_off": "Nie wyróżniaj",
+        "auto_vip_bonus": "Dodaj punkty ważności (zalecane)",
+        "auto_vip_vip": "Traktuj jak VIP — zawsze powiadamiaj",
+        "auto_vip_hint": (
+            "Program uczy się z folderu Wysłane, kogo znasz. „Traktuj jak VIP” dotyczy "
+            "konkretnych adresów (nie całych firm), pomija adresy automatyczne (no-reply, "
+            "newslettery) i nie działa przy podejrzanych mailach. "
+            "Ręczna lista VIP powyżej też zawsze powiadamia."
+        ),
+        "auto_vip_count": "Znane osoby: {addresses}, firmy: {domains}",
+        "auto_vip_show": "Pokaż listę",
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -341,6 +353,18 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Applies to notifications sent by the program (new important mail, reminders). "
             "When you click “Listen” on the computer yourself, you always hear it on the computer."
         ),
+        "auto_vip_label": "People you write to (automatically from the Sent folder):",
+        "auto_vip_off": "Do not highlight",
+        "auto_vip_bonus": "Add importance points (recommended)",
+        "auto_vip_vip": "Treat as VIP — always notify",
+        "auto_vip_hint": (
+            "The program learns whom you know from the Sent folder. “Treat as VIP” applies to "
+            "specific addresses (not whole companies), skips automated addresses (no-reply, "
+            "newsletters) and does not apply to suspicious mail. "
+            "The manual VIP list above also always notifies."
+        ),
+        "auto_vip_count": "Known people: {addresses}, companies: {domains}",
+        "auto_vip_show": "Show list",
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),
