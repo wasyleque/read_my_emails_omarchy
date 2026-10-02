@@ -3,15 +3,25 @@
 Obsługuje protokół Speaker, implementację PiperSpeaker oraz FakeSpeaker do testów.
 """
 
+import json
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 from typing import Protocol
+
+import platformdirs
 
 
 class VoiceUnavailable(Exception):
     """Wyjątek rzucany, gdy silnik syntezy lub rozpoznawania głosu jest niedostępny."""
 
     pass
+
+
+def voices_dir() -> Path:
+    """Katalog z modelami głosów Piper (poza repozytorium, w danych użytkownika)."""
+    return Path(platformdirs.user_data_dir("mailvoice")) / "voices"
 
 
 class Speaker(Protocol):
@@ -65,47 +75,82 @@ class PiperSpeaker:
         self.volume: float = 1.0
         self._current_process: subprocess.Popen | None = None
 
-    def _verify_availability(self) -> None:
-        if not shutil.which(self.piper_binary):
+    def _find_piper(self) -> str | None:
+        """Szuka programu piper w PATH oraz obok interpretera (środowisko venv bez aktywacji)."""
+        found = shutil.which(self.piper_binary)
+        if found:
+            return found
+        sibling = Path(sys.executable).parent / self.piper_binary
+        return str(sibling) if sibling.exists() else None
+
+    def _verify_availability(self) -> str:
+        piper = self._find_piper()
+        if not piper:
             raise VoiceUnavailable(
-                "Program syntezy mowy 'piper' nie został znaleziony w systemie.\n"
-                "Aby korzystać z syntezy mowy, pobierz program Piper ze strony:\n"
-                "https://github.com/rhasspy/piper/releases\n"
-                "i umieść plik wykonywalny 'piper' w zmiennej środowiskowej PATH."
+                "Program syntezy mowy 'piper' nie został znaleziony.\n"
+                "Najprościej: w środowisku aplikacji uruchom  pip install piper-tts\n"
+                "(albo pobierz program ze strony projektu Piper i dodaj go do PATH)."
             )
         try:
             import sounddevice  # noqa: F401
         except ImportError as exc:
             raise VoiceUnavailable(
                 "Biblioteka 'sounddevice' nie jest zainstalowana.\n"
-                "Zainstaluj obsługę audio poleceniem: pip install 'mailvoice[voice]'."
+                "Zainstaluj obsługę audio poleceniem: pip install -e '.[voice]'."
             ) from exc
+        return piper
+
+    def _model_path(self, name: str) -> Path:
+        """Pełna ścieżka do modelu głosu; Piper nie znajduje głosu po samej nazwie."""
+        direct = Path(name)
+        if direct.suffix == ".onnx" and direct.exists():
+            return direct
+        candidate = voices_dir() / f"{name}.onnx"
+        if not candidate.exists():
+            raise VoiceUnavailable(
+                f"Brak głosu '{name}'. Pobierz go jednym poleceniem:\n"
+                f"  python -m piper.download_voices --download-dir {voices_dir()} {name}"
+            )
+        return candidate
+
+    @staticmethod
+    def _sample_rate(model: Path) -> int:
+        try:
+            cfg = json.loads(Path(f"{model}.json").read_text(encoding="utf-8"))
+            return int(cfg.get("audio", {}).get("sample_rate", 22050))
+        except (OSError, ValueError):
+            return 22050
+
+    def _synthesize(self, piper: str, model: Path, text: str) -> bytes:
+        """Uruchamia Piper i zwraca surowe próbki 16-bit PCM mono (bez odtwarzania)."""
+        self._current_process = subprocess.Popen(
+            [piper, "--model", str(model), "--output-raw"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        raw_audio, err = self._current_process.communicate(input=text.encode("utf-8"))
+        if not raw_audio and err:
+            tail = err.decode("utf-8", "replace").strip().splitlines()[-1:]
+            raise VoiceUnavailable(f"Piper nie wygenerował dźwięku: {' '.join(tail)}")
+        return raw_audio
 
     def speak(self, text: str, lang: str = "pl") -> None:
-        self._verify_availability()
-        model = self.en_model if lang.lower().startswith("en") else self.pl_model
-
-        # Uruchomienie syntezy Piper i strumieniowanie do odtwarzacza
+        piper = self._verify_availability()
+        model = self._model_path(self.en_model if lang.lower().startswith("en") else self.pl_model)
         try:
-            # Piper generuje surowe próbki WAV na stdout
-            self._current_process = subprocess.Popen(
-                [self.piper_binary, "--model", model, "--output-raw"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
-            raw_audio, _ = self._current_process.communicate(input=text.encode("utf-8"))
-
+            raw_audio = self._synthesize(piper, model, text)
             if raw_audio:
                 import numpy as np
                 import sounddevice as sd
 
-                # Piper domyślnie generuje 16-bit PCM mono 22050Hz
                 audio_data = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
                 if self.volume != 1.0:
                     audio_data = audio_data * self.volume
-                sd.play(audio_data, samplerate=22050)
+                sd.play(audio_data, samplerate=self._sample_rate(model))
                 sd.wait()
+        except VoiceUnavailable:
+            raise
         except Exception as exc:
             raise VoiceUnavailable(f"Błąd podczas syntezy mowy Piper: {exc}") from exc
         finally:

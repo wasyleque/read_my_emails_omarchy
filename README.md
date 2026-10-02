@@ -85,9 +85,15 @@ Details and architecture decisions: [`AGENTS.md`](AGENTS.md). Open work is track
    ollama pull qwen3:8b                         # fast, good for English
    ollama pull qooba/bielik-11b-v3.0-instruct   # best for Polish
    ```
-2. **Piper (voice output, optional)** — get the `piper` binary and a voice (e.g. `pl_PL-darkman-medium` or an
-   `en_US` voice) from the [Piper releases](https://github.com/rhasspy/piper/releases) and put `piper` on your `PATH`.
-   Without Piper the app falls back to beeps and on-screen messages.
+2. **Voice (optional)** — it is installed together with the app (step 3: `pip install -e ".[voice]"` brings
+   `sounddevice`, `faster-whisper` and the `piper` speech engine; no `apt`/`pacman` package needed). Then download
+   the voices once:
+   ```bash
+   python -m piper.download_voices --download-dir ~/.local/share/mailvoice/voices \
+       pl_PL-darkman-medium en_US-lessac-medium
+   ```
+   If a voice is missing the app tells you the exact command. Without voice it falls back to beeps and on-screen
+   messages.
 3. **MailVoice**
    ```bash
    git clone https://github.com/wasyleque/read_my_emails_omarchy.git

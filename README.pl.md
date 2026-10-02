@@ -84,9 +84,14 @@ kilka nadaje się na dobry początek.
    ollama pull qwen3:8b                         # szybki, dobry dla angielskiego
    ollama pull qooba/bielik-11b-v3.0-instruct   # najlepszy dla polskiego
    ```
-2. **Piper (mowa, opcjonalnie)** — pobierz binarkę `piper` i głos (np. `pl_PL-darkman-medium` lub głos `en_US`) ze
-   [stron wydań Pipera](https://github.com/rhasspy/piper/releases) i dodaj `piper` do `PATH`. Bez Pipera aplikacja
-   używa sygnałów dźwiękowych i komunikatów na ekranie.
+2. **Głos (opcjonalnie)** — instaluje się razem z aplikacją (krok 3: `pip install -e ".[voice]"` dodaje
+   `sounddevice`, `faster-whisper` i silnik mowy `piper`; nie potrzeba pakietów `apt`/`pacman`). Potem raz pobierz głosy:
+   ```bash
+   python -m piper.download_voices --download-dir ~/.local/share/mailvoice/voices \
+       pl_PL-darkman-medium en_US-lessac-medium
+   ```
+   Gdy głosu brakuje, aplikacja podaje dokładne polecenie. Bez głosu używa sygnałów dźwiękowych i komunikatów na
+   ekranie.
 3. **MailVoice**
    ```bash
    git clone https://github.com/wasyleque/read_my_emails_omarchy.git
