@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import logging
 import secrets
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
@@ -59,6 +60,8 @@ class ServerContext:
     event_queues: dict[web.WebSocketResponse, asyncio.Queue] = field(default_factory=dict)
     rate_limits: dict[str, list[float]] = field(default_factory=dict)
     rate_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    digest_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    digest_cache: dict[int, tuple[float, Any]] = field(default_factory=dict)
 
 
 CONTEXT_KEY: web.AppKey[ServerContext] = web.AppKey("context", ServerContext)
@@ -92,6 +95,30 @@ async def security_headers_middleware(
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Server"] = "MailVoice"
     return response
+
+
+_access_log = logging.getLogger("mailvoice.crash")  # ten sam plik logu co błędy aplikacji
+
+
+@web.middleware
+async def access_log_middleware(
+    request: web.Request,
+    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+) -> web.StreamResponse:
+    """Dziennik zapytań do diagnostyki: metoda, ścieżka, kod, adres. Bez tokenów i bez treści."""
+    status = 500
+    try:
+        response = await handler(request)
+        status = response.status
+        return response
+    except web.HTTPException as exc:
+        status = exc.status
+        raise
+    finally:
+        # identyfikator maili w ścieżce jest nieprzewidywalny, więc bezpieczny w logu
+        _access_log.info(
+            "telefon: %s %s -> %s (%s)", request.method, request.path, status, request.remote
+        )
 
 
 @web.middleware
@@ -351,41 +378,72 @@ async def handle_mail_ack(request: web.Request) -> web.Response:
     )
 
 
+_ACTIONABLE = ("oczekuje_na_mnie", "oczekuje_na_innych")
+_DIGEST_TTL_S = 120.0
+
+
+def _compute_digest(ctx: ServerContext, days: int):
+    """Liczy podsumowanie w wątku roboczym; krótki budżet modelu = szybka odpowiedź dla telefonu."""
+    if ctx.service and hasattr(ctx.service, "request_digest"):
+        return ctx.service.request_digest(days=days, emit=False, llm_budget=3, llm_deadline_s=8.0)
+    from mailvoice.core.analyzer import OllamaClient
+
+    client = getattr(ctx.service, "ollama_client", None) or OllamaClient(ctx.config.ollama)
+    return build_digest(ctx.store, client, ctx.config, llm_budget=3, llm_deadline_s=8.0)
+
+
 async def handle_digest(request: web.Request) -> web.Response:
-    """GET /v1/digest - Zwraca podsumowanie tematów."""
+    """GET /v1/digest?days=&limit=&all= - Podsumowanie tematów (domyślnie tylko sprawy otwarte).
+
+    Zwraca najwyżej `limit` tematów (domyślnie 60). Bez `all=1` pomija tematy „zamknięte” i
+    „informacyjne” — jest ich zwykle najwięcej — ale podaje ich liczbę w `counts`.
+    """
     ctx: ServerContext = request.app[CONTEXT_KEY]
-    days_str = request.query.get("days", str(ctx.config.digest_days))
     try:
-        days = max(1, min(365, int(days_str)))
+        days = max(1, min(365, int(request.query.get("days", ctx.config.digest_days))))
     except ValueError:
         days = ctx.config.digest_days
+    try:
+        limit = max(1, min(200, int(request.query.get("limit", "60"))))
+    except ValueError:
+        limit = 60
+    include_all = request.query.get("all") == "1"
 
-    if ctx.service and hasattr(ctx.service, "request_digest"):
-        digest = ctx.service.request_digest(days=days)
-    else:
-        from mailvoice.core.analyzer import OllamaClient
+    now = time.monotonic()
+    async with ctx.digest_lock:  # jedno liczenie naraz; kolejne zapytania dostają wynik z pamięci
+        cached = ctx.digest_cache.get(days)
+        if cached and now - cached[0] < _DIGEST_TTL_S:
+            digest = cached[1]
+        else:
+            digest = await asyncio.get_running_loop().run_in_executor(
+                None, _compute_digest, ctx, days
+            )
+            ctx.digest_cache[days] = (time.monotonic(), digest)
 
-        client = getattr(ctx.service, "ollama_client", None) or OllamaClient(ctx.config.ollama)
-        digest = build_digest(ctx.store, client, ctx.config)
-
-    topics_data = []
+    counts: dict[str, int] = {}
     for t in digest.topics:
-        topics_data.append(
-            {
-                "title": filter_urls(t.title),
-                "status": t.status,
-                "why": filter_urls(t.why),
-                "importance": t.importance,
-                "mail_count": t.mail_count,
-                "last_activity": t.last_activity.isoformat() if t.last_activity else None,
-                "who_to_whom": t.who_to_whom,
-            }
-        )
+        counts[t.status] = counts.get(t.status, 0) + 1
+    chosen = [t for t in digest.topics if include_all or t.status in _ACTIONABLE][:limit]
 
+    topics_data = [
+        {
+            "title": filter_urls(t.title),
+            "status": t.status,
+            "why": filter_urls(t.why),
+            "importance": t.importance,
+            "mail_count": t.mail_count,
+            "last_activity": t.last_activity.isoformat() if t.last_activity else None,
+            "who_to_whom": t.who_to_whom,
+        }
+        for t in chosen
+    ]
     return web.json_response(
         {
             "period": digest.period,
             "topics": topics_data,
+            "counts": counts,
+            "total": len(digest.topics),
+            "shown": len(topics_data),
         }
     )
 
@@ -507,6 +565,7 @@ def create_app(context: ServerContext) -> web.Application:
     app = web.Application(
         client_max_size=64 * 1024,  # Limit rozmiaru żądania: 64 KB
         middlewares=[
+            access_log_middleware,
             security_headers_middleware,
             rate_limit_middleware,
             auth_middleware,

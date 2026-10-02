@@ -102,6 +102,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Maile pasujące do reguły są po cichu pomijane — nie trafiają na listę ważnych i nie "
             "są czytane. Ignorowanie ma pierwszeństwo przed VIP."
         ),
+        "btn_read_digest": "Czytaj podsumowanie",
+        "digest_more": "… i {count} więcej (odśwież lub zawęź okres, aby zobaczyć mniej)",
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -401,6 +403,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Mail matching a rule is silently skipped — it does not appear in the important list "
             "and is not read aloud. Ignoring takes priority over VIP."
         ),
+        "btn_read_digest": "Read summary aloud",
+        "digest_more": "… and {count} more (refresh or narrow the period to see fewer)",
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),

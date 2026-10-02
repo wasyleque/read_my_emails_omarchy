@@ -504,6 +504,10 @@ class VoiceDialog:
             return True
         return False
 
+    def read_digest(self, topics: list[Topic], lang: str) -> None:
+        """Czyta podsumowanie na życzenie użytkownika (przycisk), nie po zdarzeniu systemowym."""
+        self._read_digest_topics(topics, lang)
+
     def _read_digest_topics(self, topics: list[Topic], lang: str) -> None:
         """Odczytuje kolejne tematy z podsumowania (digest) z możliwością nawigacji."""
         if not topics:

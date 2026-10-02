@@ -338,6 +338,11 @@ class MainWindow(QMainWindow):
         self.btn_refresh_digest.clicked.connect(self._on_refresh_digest)
         ctrl_layout.addWidget(self.btn_refresh_digest)
 
+        self.btn_read_digest = QPushButton(tr("btn_read_digest"))
+        self.btn_read_digest.setEnabled(False)  # włączy się, gdy lista będzie gotowa
+        self.btn_read_digest.clicked.connect(self._read_digest_aloud)
+        ctrl_layout.addWidget(self.btn_read_digest)
+
         self.lbl_digest_status = QLabel("")
         self.lbl_digest_status.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         ctrl_layout.addWidget(self.lbl_digest_status)
@@ -701,17 +706,12 @@ class MainWindow(QMainWindow):
             self._show_problem(event.message)
 
         elif isinstance(event, DigestReady):
+            # Tylko pokaż listę. Czytanie włącza użytkownik przyciskiem („Czytaj podsumowanie” /
+            # „Posłuchaj”) — wcześniej każde zapytanie (też z telefonu) czytało wszystko na głos.
             self._display_digest(event.digest)
-            if self.voice_dialog and not self._is_muted:
-                self.voice_dialog.handle_event(event)
 
-        elif isinstance(event, ContactCardReady):
-            if self.voice_dialog and not self._is_muted:
-                self.voice_dialog.handle_event(event)
-
-        elif isinstance(event, SearchResults):
-            if self.voice_dialog and not self._is_muted:
-                self.voice_dialog.handle_event(event)
+        elif isinstance(event, (ContactCardReady, SearchResults)):
+            pass  # wynik pokazują okna; czytanie na żądanie (przyciski „Posłuchaj”)
 
     def _on_mail_selection_changed(self) -> None:
         """Obsługuje zaznaczenie wiersza w tabeli wiadomości."""
@@ -834,9 +834,23 @@ class MainWindow(QMainWindow):
         friendly = format_friendly_error(err_msg, lang=get_language())
         self.lbl_digest_status.setText(f"Problem: {friendly}")
 
+    def _read_digest_aloud(self) -> None:
+        """Czyta otwarte sprawy (czekające na Ciebie, potem na innych) — tylko na życzenie."""
+        digest = getattr(self, "current_digest", None)
+        if not digest or not self.voice_dialog:
+            return
+        actionable = [
+            t for t in digest.topics if t.status in ("oczekuje_na_mnie", "oczekuje_na_innych")
+        ]
+        self.voice_dialog.read_digest(actionable, get_language())
+
     def _display_digest(self, digest: Digest) -> None:
         """Renderuje karty tematów w zakładce podsumowania."""
         self.current_digest = digest
+        actionable_count = sum(
+            1 for t in digest.topics if t.status in ("oczekuje_na_mnie", "oczekuje_na_innych")
+        )
+        self.btn_read_digest.setEnabled(bool(self.voice_dialog) and actionable_count > 0)
         self.lbl_digest_status.setText(f"{tr('status_ready')} ({digest.period})")
         self.btn_refresh_digest.setEnabled(True)
 
@@ -866,6 +880,8 @@ class MainWindow(QMainWindow):
         self._add_digest_group(tr("digest_group_info"), info_topics, border_color=theme.c("muted"))
         self.digest_layout.addStretch()
 
+    _MAX_CARDS_PER_GROUP = 40  # setki widżetów naraz zamulają okno
+
     def _add_digest_group(self, title: str, topics: list[Topic], border_color: str = "") -> None:
         """Dodaje sekcję grupującą karty tematów."""
         group = QGroupBox(f"{title} ({len(topics)})")
@@ -880,7 +896,7 @@ class MainWindow(QMainWindow):
             lbl_none.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px; margin: 4px;")
             grp_layout.addWidget(lbl_none)
         else:
-            for topic in topics:
+            for topic in topics[: self._MAX_CARDS_PER_GROUP]:
                 card = QFrame()
                 card.setFrameShape(QFrame.Shape.StyledPanel)
                 card.setObjectName("card")
@@ -918,6 +934,10 @@ class MainWindow(QMainWindow):
 
                 grp_layout.addWidget(card)
 
+        if len(topics) > self._MAX_CARDS_PER_GROUP:
+            lbl_more = QLabel(tr("digest_more", count=len(topics) - self._MAX_CARDS_PER_GROUP))
+            lbl_more.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px; margin: 4px;")
+            grp_layout.addWidget(lbl_more)
         self.digest_layout.addWidget(group)
 
     def _listen_to_topic(self, topic: Topic) -> None:

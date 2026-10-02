@@ -1,12 +1,18 @@
 """Moduł podsumowania wątków i tematów (topic digest)."""
 
+import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from typing import Literal
 
-from mailvoice.core.analyzer import AnalyzerError, OllamaClient, pick_model
+from mailvoice.core.analyzer import (
+    AnalyzerError,
+    AnalyzerTransportError,
+    OllamaClient,
+    pick_model,
+)
 from mailvoice.core.config import AppConfig
 from mailvoice.core.store import MailIndexRecord, Store
 from mailvoice.core.threading import clean_subject
@@ -173,15 +179,39 @@ def _fallback_who_to_whom(records: list[MailIndexRecord]) -> list[str]:
     return lines
 
 
+class _SkipLlm(Exception):
+    """Wewnętrzny sygnał: nie pytaj modelu o ten temat."""
+
+
+_LLM_COOLDOWN_S = 300.0
+_SLOW_FAILURE_S = 5.0  # awaria trwająca dłużej = serwer modelu nie odpowiada
+_LLM_COOLDOWN_UNTIL = [0.0]  # czas (monotonic), do którego omijamy model po awarii
+
+
+def reset_llm_cooldown() -> None:
+    _LLM_COOLDOWN_UNTIL[0] = 0.0
+
+
 def build_digest(
     store: Store,
     client: OllamaClient,
     config: AppConfig,
     since: str | datetime | None = None,
     until: str | datetime | None = None,
+    llm_budget: int = 5,
+    llm_deadline_s: float = 15.0,
 ) -> Digest:
-    """Buduje podsumowanie tematów (Digest) z wybranego okresu na podstawie indeksu wiadomości."""
+    """Buduje podsumowanie tematów (Digest) z wybranego okresu na podstawie indeksu wiadomości.
+
+    Model jest pytany tylko o tematy bez wpisu w pamięci podręcznej i NIGDY dłużej niż pozwala
+    budżet (`llm_budget` wywołań, `llm_deadline_s` sekund). Po pierwszej awarii lub timeoucie
+    reszta tematów dostaje opis awaryjny, a model jest omijany przez kilka minut — wcześniej
+    każde zapytanie czekało minutę na ten sam nieudany timeout.
+    """
     now = datetime.now(timezone.utc)
+    started = time.monotonic()
+    llm_calls = 0
+    consecutive_failures = 0
 
     # 1. Ustalenie zakresu dat
     if since is None:
@@ -332,8 +362,18 @@ def build_digest(
             status_cand = "oczekuje_na_mnie"
         who_to_whom = _fallback_who_to_whom(thread_records)
 
+        use_llm = (
+            llm_calls < llm_budget
+            and time.monotonic() - started < llm_deadline_s
+            and time.monotonic() >= _LLM_COOLDOWN_UNTIL[0]
+        )
         try:
+            if not use_llm:
+                raise _SkipLlm
+            llm_calls += 1
+            call_started = time.monotonic()
             res = client.chat_json(messages, model, TOPIC_SCHEMA)
+            consecutive_failures = 0
             if isinstance(res, dict):
                 title = str(res.get("title") or title).strip()
                 why = str(res.get("why") or why).strip()
@@ -352,9 +392,16 @@ def build_digest(
                     status=status_cand,
                     who_to_whom=who_to_whom,
                 )
+        except _SkipLlm:
+            pass  # budżet wyczerpany lub model chwilowo omijany — zostaje opis awaryjny
+        except AnalyzerTransportError:
+            # Wolna awaria (timeout) albo kolejna z rzędu: omijamy model, by nie czekać na
+            # każdy temat osobno. Pojedynczy szybki błąd nie blokuje pozostałych tematów.
+            consecutive_failures += 1
+            if time.monotonic() - call_started > _SLOW_FAILURE_S or consecutive_failures >= 2:
+                _LLM_COOLDOWN_UNTIL[0] = time.monotonic() + _LLM_COOLDOWN_S
         except (AnalyzerError, Exception):
-            # Błąd LLM dla jednego tematu nie zabija reszty
-            pass
+            pass  # zła odpowiedź dla JEDNEGO tematu nie zatrzymuje pozostałych
 
         final_status = _determine_status(
             status_cand, last_record.sender, user_addrs, thread_records

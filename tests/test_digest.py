@@ -432,3 +432,88 @@ def test_fallback_who_to_whom_bidirectional():
     assert len(lines) == 2
     assert "anna@firm.com -> Ty: Oferta" in lines[0]
     assert "Ty -> anna@firm.com: Oferta" in lines[1]
+
+
+def test_repeated_transport_failures_stop_model_calls_and_next_build_does_not_wait(tmp_path):
+    """Regresja: każde zapytanie o podsumowanie czekało minutę na ten sam timeout modelu."""
+    from datetime import datetime, timezone
+
+    from mailvoice.core.analyzer import AnalyzerTransportError
+    from mailvoice.core.config import AppConfig
+    from mailvoice.core.digest import build_digest
+    from mailvoice.core.store import MailIndexRecord, Store
+
+    store = Store(tmp_path / "s.db")
+    now = datetime.now(timezone.utc).isoformat()
+    for uid in range(1, 5):
+        store.save_mail_index(
+            MailIndexRecord(
+                account="a",
+                folder="INBOX",
+                uidvalidity=1,
+                uid=uid,
+                message_id=f"<{uid}@x>",
+                thread_key=f"t{uid}",
+                date=now,
+                sender="x@y.pl",
+                recipients="ja@x.pl",
+                subject=f"Temat {uid}",
+                importance=7,
+                why="w",
+                summary="s",
+                direction="in",
+            )
+        )
+
+    class DeadModel:
+        calls = 0
+
+        def chat_json(self, *a, **k):
+            DeadModel.calls += 1
+            raise AnalyzerTransportError("serwer nie odpowiada")
+
+    first = build_digest(store, DeadModel(), AppConfig())
+    assert DeadModel.calls == 2  # dwie awarie z rzędu -> reszta tematów omija model
+    assert len(first.topics) == 4  # wszystkie tematy mają opis awaryjny
+    build_digest(store, DeadModel(), AppConfig())
+    assert DeadModel.calls == 2  # model jest omijany przez kilka minut, zero czekania
+
+
+def test_model_budget_limits_calls_per_build(tmp_path):
+    from datetime import datetime, timezone
+
+    from mailvoice.core.config import AppConfig
+    from mailvoice.core.digest import build_digest
+    from mailvoice.core.store import MailIndexRecord, Store
+
+    store = Store(tmp_path / "s.db")
+    now = datetime.now(timezone.utc).isoformat()
+    for uid in range(1, 9):
+        store.save_mail_index(
+            MailIndexRecord(
+                account="a",
+                folder="INBOX",
+                uidvalidity=1,
+                uid=uid,
+                message_id=f"<{uid}@x>",
+                thread_key=f"t{uid}",
+                date=now,
+                sender="x@y.pl",
+                recipients="ja@x.pl",
+                subject=f"Temat {uid}",
+                importance=7,
+                why="w",
+                summary="s",
+                direction="in",
+            )
+        )
+
+    class CountingModel:
+        calls = 0
+
+        def chat_json(self, *a, **k):
+            CountingModel.calls += 1
+            return {"title": "T", "why": "W", "status": "informacyjne", "who_to_whom": ["a"]}
+
+    digest = build_digest(store, CountingModel(), AppConfig(), llm_budget=3)
+    assert CountingModel.calls == 3 and len(digest.topics) == 8

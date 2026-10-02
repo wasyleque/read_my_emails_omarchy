@@ -283,8 +283,20 @@ class MailService:
         to_resolve = items if items is not None else load_pending_backlog(self.store)
         pipeline_resolve_backlog(self.store, to_resolve, accepted)
 
-    def request_digest(self, days: int | None = None) -> Digest:
-        """Generuje podsumowanie wątków za podaną liczbę dni (lub domyślnie z configu)."""
+    def request_digest(
+        self,
+        days: int | None = None,
+        *,
+        emit: bool = True,
+        llm_budget: int = 30,
+        llm_deadline_s: float = 90.0,
+    ) -> Digest:
+        """Generuje podsumowanie wątków za podaną liczbę dni (lub domyślnie z configu).
+
+        `emit=False` — bez zdarzenia DigestReady (np. zapytanie z telefonu). Małe `llm_budget`
+        i `llm_deadline_s` wymuszają szybką odpowiedź kosztem opisów awaryjnych (uzupełnią się
+        w pamięci podręcznej przy kolejnych budowach).
+        """
         effective_days = days if (days is not None and days >= 1) else self.config.digest_days
         now = self._clock()
         since_dt = now - timedelta(days=effective_days)
@@ -294,8 +306,11 @@ class MailService:
             config=self.config,
             since=since_dt,
             until=now,
+            llm_budget=llm_budget,
+            llm_deadline_s=llm_deadline_s,
         )
-        self._emit(DigestReady(digest=digest))
+        if emit:
+            self._emit(DigestReady(digest=digest))
         return digest
 
     def contact_context(
