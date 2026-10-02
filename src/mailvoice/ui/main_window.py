@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
+import platformdirs
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
@@ -128,7 +129,9 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.service = service
-        self.config_path = config_path or Path("config.json")
+        self.config_path = config_path or (
+            Path(platformdirs.user_config_dir("mailvoice")) / "config.json"
+        )
         self.speaker = speaker
         self.beeper = beeper
         self.voice_dialog = voice_dialog
@@ -182,12 +185,14 @@ class MainWindow(QMainWindow):
         msg_layout.addWidget(lbl_section)
 
         self.tbl_mails = QTableWidget(0, 4)
-        self.tbl_mails.setHorizontalHeaderLabels([
-            tr("col_sender"),
-            tr("col_subject"),
-            tr("col_reason"),
-            tr("col_actions"),
-        ])
+        self.tbl_mails.setHorizontalHeaderLabels(
+            [
+                tr("col_sender"),
+                tr("col_subject"),
+                tr("col_reason"),
+                tr("col_actions"),
+            ]
+        )
         header = self.tbl_mails.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -628,15 +633,11 @@ class MainWindow(QMainWindow):
         waiting_others = [t for t in digest.topics if t.status == "oczekuje_na_innych"]
         info_topics = [t for t in digest.topics if t.status in ("informacyjne", "zamknięte")]
 
-        self._add_digest_group(
-            tr("digest_group_waiting_me"), waiting_me, border_color="#1a5fb4"
-        )
+        self._add_digest_group(tr("digest_group_waiting_me"), waiting_me, border_color="#1a5fb4")
         self._add_digest_group(
             tr("digest_group_waiting_others"), waiting_others, border_color="#e5a50a"
         )
-        self._add_digest_group(
-            tr("digest_group_info"), info_topics, border_color="#9a9996"
-        )
+        self._add_digest_group(tr("digest_group_info"), info_topics, border_color="#9a9996")
         self.digest_layout.addStretch()
 
     def _add_digest_group(

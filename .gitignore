@@ -45,3 +45,23 @@ logs/
 
 # Skrypty specyficzne dla środowiska autora
 scripts/
+
+# DANE OSOBISTE — nigdy do repozytorium (aplikacja trzyma je w katalogach użytkownika, to tylko zabezpieczenie)
+config.json
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.vault
+*.enc
+secrets.json
+.env
+.env.*
+*.eml
+*.mbox
+*.msg
+*.pem
+*.key
+docs/private/
