@@ -302,3 +302,61 @@ def test_search_dialog_smoke(qapp):
     dlg._listen_to_hit(hit)
     assert len(speaker.spoken) > 0
     assert "Faktura VAT 12/2026" in speaker.spoken[-1][0]
+
+
+def test_account_page_details_toggle(qapp):
+    """Test rozwinięcia i ukrywania szczegółów technicznych w kreatorze."""
+    from mailvoice.ui.wizard import AccountPage
+
+    sec_store = FakeSecretStore()
+    page = AccountPage(secret_store=sec_store)
+    page.show()
+
+    assert not page.btn_details.isVisible()
+    assert not page.txt_details.isVisible()
+
+    page._on_test_error("Coś poszło nie tak.", "Typ błędu: FetchError\nSzczegóły: connection reset")
+    assert page.btn_details.isVisible()
+    assert not page.txt_details.isVisible()
+    assert "Szczegóły" in page.btn_details.text()
+
+    page._toggle_details()
+    assert page.txt_details.isVisible()
+    assert "FetchError" in page.txt_details.toPlainText()
+    assert "Ukryj" in page.btn_details.text()
+
+    page._toggle_details()
+    assert not page.txt_details.isVisible()
+
+    page._on_input_changed()
+    assert not page.btn_details.isVisible()
+    assert not page.txt_details.isVisible()
+    page.close()
+
+
+def test_settings_dialog_details_toggle(qapp, tmp_path):
+    """Test testowania połączenia i rozwinięcia szczegółów w oknie ustawień."""
+    sec_store = FakeSecretStore()
+    cfg = AppConfig()
+    cfg_file = tmp_path / "config.json"
+    dlg = SettingsDialog(cfg, cfg_file, sec_store)
+    dlg.show()
+
+    assert hasattr(dlg, "btn_test")
+    assert hasattr(dlg, "btn_details")
+    assert hasattr(dlg, "txt_details")
+    assert not dlg.btn_details.isVisible()
+    assert not dlg.txt_details.isVisible()
+
+    dlg._on_test_error("Błąd połączenia.", "Typ błędu: TimeoutError\nSzczegóły: timeout 30s")
+    assert dlg.btn_details.isVisible()
+    assert not dlg.txt_details.isVisible()
+
+    dlg._toggle_details()
+    assert dlg.txt_details.isVisible()
+    assert "TimeoutError" in dlg.txt_details.toPlainText()
+
+    dlg._on_account_input_changed()
+    assert not dlg.btn_details.isVisible()
+    assert not dlg.txt_details.isVisible()
+    dlg.close()

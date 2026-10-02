@@ -23,6 +23,7 @@ from mailvoice.core.imap_fetch import (
     fetch_sent_message_ids,
 )
 from mailvoice.core.mailparse import ParsedMail
+from mailvoice.core.phishing import assess as phishing_assess
 from mailvoice.core.rules import MailInfo, Rules
 from mailvoice.core.rules import evaluate as rules_evaluate
 from mailvoice.core.store import MailIndexRecord, Store
@@ -40,6 +41,8 @@ def _index_mail(
     why: str,
     summary: str = "",
     direction: str = "in",
+    risk: str = "low",
+    risk_reasons: str = "",
 ) -> None:
     """Zapisuje metadane i podsumowanie przetworzonej wiadomości do tabeli mail_index."""
     date_str = mail.date.isoformat() if mail.date else datetime.now(timezone.utc).isoformat()
@@ -61,6 +64,8 @@ def _index_mail(
         why=why,
         summary=summary,
         direction=direction,
+        risk=risk,
+        risk_reasons=risk_reasons,
     )
     store.save_mail_index(record)
     store.invalidate_topic_digest_cache(key)
@@ -80,6 +85,10 @@ class ProcessedMail:
     analysis_reason: str
     action: str
     language: str
+    suspicious: bool = False
+    risk_level: str = "low"
+    risk_reasons: tuple[str, ...] = ()
+    summary: str = ""
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,7 @@ class CycleResult:
 
     important: list[ProcessedMail] = field(default_factory=list)
     backlog_important: list[ProcessedMail] = field(default_factory=list)
+    suspicious: list[ProcessedMail] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     def resolve_backlog(self, store: Store, accepted: bool) -> None:
@@ -194,6 +204,8 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
     Awaria Ollamy dla jednego maila nie przerywa cyklu ani nie gubi maila.
     """
     result = CycleResult()
+    known_contacts = list(deps.config.vip_senders) + deps.store.get_all_contact_addresses()
+    my_addresses = [acc.username for acc in deps.config.accounts if acc.username]
 
     for account in deps.config.accounts:
         try:
@@ -317,6 +329,70 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         )
                         continue
 
+                    # Ocena ryzyka bezpieczeństwa i phishingu
+                    risk_assessment = phishing_assess(
+                        mail=mail,
+                        headers=None,
+                        my_addresses=my_addresses,
+                        known_contacts=known_contacts,
+                    )
+                    is_high_risk = risk_assessment.risk == "high"
+                    is_medium_risk = risk_assessment.risk == "medium"
+                    reasons_text = "; ".join(risk_assessment.reasons)
+
+                    if is_high_risk:
+                        auto_summary = (
+                            "⚠ Podejrzana wiadomość (wykryto ryzyko phishingu/zagrożenia). "
+                            f"Powody: {reasons_text}. "
+                            "Nie klikaj w linki ani nie otwieraj załączników."
+                        )
+                        final_importance = min(3, rule_res.score_bonus)
+                        processed = ProcessedMail(
+                            account=account.name,
+                            folder=folder,
+                            uidvalidity=uidvalidity,
+                            uid=uid,
+                            mail=mail,
+                            final_importance=final_importance,
+                            rule_reasons=rule_res.reasons,
+                            analysis_reason=auto_summary,
+                            action="ignore",
+                            language=(
+                                deps.config.language
+                                if deps.config.language in ("pl", "en")
+                                else "other"
+                            ),
+                            suspicious=True,
+                            risk_level="high",
+                            risk_reasons=risk_assessment.reasons,
+                            summary=auto_summary,
+                        )
+                        deps.store.mark_seen(
+                            account.name,
+                            folder,
+                            uidvalidity,
+                            uid,
+                            mail.message_id,
+                            status="analyzed",
+                            importance=final_importance,
+                        )
+                        _index_mail(
+                            deps.store,
+                            account.name,
+                            folder,
+                            uidvalidity,
+                            uid,
+                            mail,
+                            importance=final_importance,
+                            why=auto_summary,
+                            summary=auto_summary,
+                            direction="in",
+                            risk="high",
+                            risk_reasons=reasons_text,
+                        )
+                        result.suspicious.append(processed)
+                        continue
+
                     messages = build_messages(
                         deps.config.analysis_prompt,
                         mail.sender,
@@ -367,6 +443,14 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         continue
 
                     final_importance = max(0, min(10, analysis.importance + rule_res.score_bonus))
+                    analysis_reason = analysis.reason
+                    summary = ""
+                    if is_medium_risk:
+                        analysis_reason = (
+                            f"[Uwaga: wiadomość może być podejrzana] {analysis.reason}"
+                        )
+                        summary = f"[Uwaga: wiadomość może być podejrzana] {analysis.reason}"
+
                     processed = ProcessedMail(
                         account=account.name,
                         folder=folder,
@@ -375,9 +459,13 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         mail=mail,
                         final_importance=final_importance,
                         rule_reasons=rule_res.reasons,
-                        analysis_reason=analysis.reason,
+                        analysis_reason=analysis_reason,
                         action=analysis.action,
                         language=analysis.language,
+                        suspicious=is_medium_risk,
+                        risk_level=risk_assessment.risk,
+                        risk_reasons=risk_assessment.reasons,
+                        summary=summary,
                     )
 
                     if final_importance >= deps.config.importance_threshold:
@@ -412,7 +500,11 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         uid,
                         mail,
                         importance=final_importance,
-                        why=analysis.reason,
+                        why=analysis_reason,
+                        summary=summary,
+                        direction="in",
+                        risk=risk_assessment.risk,
+                        risk_reasons=reasons_text,
                     )
 
             if is_first_run:
@@ -463,6 +555,71 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                         why="; ".join(rule_res.reasons) or "Zablokowany nadawca",
                     )
                     last_committed_uid = max(last_committed_uid, uid)
+                    continue
+
+                # Ocena ryzyka bezpieczeństwa i phishingu
+                risk_assessment = phishing_assess(
+                    mail=mail,
+                    headers=None,
+                    my_addresses=my_addresses,
+                    known_contacts=known_contacts,
+                )
+                is_high_risk = risk_assessment.risk == "high"
+                is_medium_risk = risk_assessment.risk == "medium"
+                reasons_text = "; ".join(risk_assessment.reasons)
+
+                if is_high_risk:
+                    auto_summary = (
+                        "⚠ Podejrzana wiadomość (wykryto ryzyko phishingu/zagrożenia). "
+                        f"Powody: {reasons_text}. "
+                        "Nie klikaj w linki ani nie otwieraj załączników."
+                    )
+                    final_importance = min(3, rule_res.score_bonus)
+                    processed = ProcessedMail(
+                        account=account.name,
+                        folder=folder,
+                        uidvalidity=uidvalidity,
+                        uid=uid,
+                        mail=mail,
+                        final_importance=final_importance,
+                        rule_reasons=rule_res.reasons,
+                        analysis_reason=auto_summary,
+                        action="ignore",
+                        language=(
+                            deps.config.language
+                            if deps.config.language in ("pl", "en")
+                            else "other"
+                        ),
+                        suspicious=True,
+                        risk_level="high",
+                        risk_reasons=risk_assessment.reasons,
+                        summary=auto_summary,
+                    )
+                    deps.store.mark_seen(
+                        account.name,
+                        folder,
+                        uidvalidity,
+                        uid,
+                        mail.message_id,
+                        status="analyzed",
+                        importance=final_importance,
+                    )
+                    last_committed_uid = max(last_committed_uid, uid)
+                    _index_mail(
+                        deps.store,
+                        account.name,
+                        folder,
+                        uidvalidity,
+                        uid,
+                        mail,
+                        importance=final_importance,
+                        why=auto_summary,
+                        summary=auto_summary,
+                        direction="in",
+                        risk="high",
+                        risk_reasons=reasons_text,
+                    )
+                    result.suspicious.append(processed)
                     continue
 
                 messages = build_messages(
@@ -523,6 +680,12 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                 )
                 last_committed_uid = max(last_committed_uid, uid)
 
+                analysis_reason = analysis.reason
+                summary = ""
+                if is_medium_risk:
+                    analysis_reason = f"[Uwaga: wiadomość może być podejrzana] {analysis.reason}"
+                    summary = f"[Uwaga: wiadomość może być podejrzana] {analysis.reason}"
+
                 processed = ProcessedMail(
                     account=account.name,
                     folder=folder,
@@ -531,9 +694,13 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     mail=mail,
                     final_importance=final_importance,
                     rule_reasons=rule_res.reasons,
-                    analysis_reason=analysis.reason,
+                    analysis_reason=analysis_reason,
                     action=analysis.action,
                     language=analysis.language,
+                    suspicious=is_medium_risk,
+                    risk_level=risk_assessment.risk,
+                    risk_reasons=risk_assessment.reasons,
+                    summary=summary,
                 )
 
                 _index_mail(
@@ -544,7 +711,11 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
                     uid,
                     mail,
                     importance=final_importance,
-                    why=analysis.reason,
+                    why=analysis_reason,
+                    summary=summary,
+                    direction="in",
+                    risk=risk_assessment.risk,
+                    risk_reasons=reasons_text,
                 )
 
                 if final_importance >= deps.config.importance_threshold:

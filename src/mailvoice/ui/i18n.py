@@ -155,6 +155,19 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "search_confidence_medium": "Średnia pewność",
         "search_confidence_low": "Niska pewność",
         "search_why_probable": "Dlaczego prawdopodobny:",
+        "badge_suspicious": "⚠ Podejrzany",
+        "suspicious_warning_dialog": (
+            "Ta wiadomość została oznaczona jako potencjalnie niebezpieczna "
+            "(phishing / złośliwe oprogramowanie). "
+            "Nie otwieraj odnośników ani nie pobieraj załączników."
+        ),
+        "suspicious_reasons_title": "Powody oznaczenia jako podejrzany:",
+        "error_generic_title": "Coś poszło nie tak",
+        "error_generic_msg": (
+            "Coś poszło nie tak. Spróbuj ponownie. Jeśli problem wraca, kliknij Szczegóły."
+        ),
+        "btn_details": "Szczegóły techniczne",
+        "btn_hide_details": "Ukryj szczegóły",
     },
     "en": {
         # Wizard
@@ -307,6 +320,18 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "search_confidence_medium": "Medium confidence",
         "search_confidence_low": "Low confidence",
         "search_why_probable": "Why probable:",
+        "badge_suspicious": "⚠ Suspicious",
+        "suspicious_warning_dialog": (
+            "This message has been flagged as potentially dangerous "
+            "(phishing / malware). Do not open links or download attachments."
+        ),
+        "suspicious_reasons_title": "Reasons flagged as suspicious:",
+        "error_generic_title": "Something went wrong",
+        "error_generic_msg": (
+            "Something went wrong. Please try again. If the problem persists, click Details."
+        ),
+        "btn_details": "Technical details",
+        "btn_hide_details": "Hide details",
     },
 }
 

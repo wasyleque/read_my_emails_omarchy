@@ -1,7 +1,5 @@
 """Kreator pierwszego uruchomienia aplikacji MailVoice."""
 
-import json
-import urllib.request
 from typing import Callable
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
@@ -27,8 +25,9 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
+from mailvoice.core.analyzer import fetch_ollama_models
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig
-from mailvoice.core.friendly_errors import format_friendly_error
+from mailvoice.core.friendly_errors import format_friendly_error_ex
 from mailvoice.core.imap_fetch import ImapToolsClient
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
@@ -40,7 +39,7 @@ class ImapTestWorker(QThread):
     """Wątek sprawdzania połączenia ze skrzynką IMAP."""
 
     finished_ok = Signal()
-    finished_error = Signal(str)
+    finished_error = Signal(str, str)
 
     def __init__(
         self,
@@ -75,8 +74,8 @@ class ImapTestWorker(QThread):
                 client.close()
             self.finished_ok.emit()
         except Exception as exc:
-            msg = format_friendly_error(exc, lang=self.lang)
-            self.finished_error.emit(msg)
+            msg, details = format_friendly_error_ex(exc, lang=self.lang)
+            self.finished_error.emit(msg, details)
 
 
 class WelcomePage(QWizardPage):
@@ -161,16 +160,30 @@ class AccountPage(QWizardPage):
         layout.addWidget(self.lbl_help)
 
         # Przycisk sprawdzania połączenia i etykieta wyniku
-        test_layout = QHBoxLayout()
+        test_container = QVBoxLayout()
+        test_row = QHBoxLayout()
         self.btn_test = QPushButton(tr("step2_test_btn"))
         self.btn_test.clicked.connect(self._on_test_connection)
-        test_layout.addWidget(self.btn_test)
+        test_row.addWidget(self.btn_test)
 
         self.lbl_test_result = QLabel("")
         self.lbl_test_result.setWordWrap(True)
-        test_layout.addWidget(self.lbl_test_result)
-        test_layout.addStretch()
-        layout.addLayout(test_layout)
+        test_row.addWidget(self.lbl_test_result)
+        test_row.addStretch()
+        test_container.addLayout(test_row)
+
+        self.btn_details = QPushButton(tr("btn_details"))
+        self.btn_details.setVisible(False)
+        self.btn_details.clicked.connect(self._toggle_details)
+        test_container.addWidget(self.btn_details, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self.txt_details = QTextEdit()
+        self.txt_details.setReadOnly(True)
+        self.txt_details.setMaximumHeight(90)
+        self.txt_details.setVisible(False)
+        test_container.addWidget(self.txt_details)
+
+        layout.addLayout(test_container)
 
         # Sekcja zaawansowana (zwijana / opcjonalna)
         self.advanced_box = QGroupBox(tr("step2_advanced"))
@@ -193,6 +206,11 @@ class AccountPage(QWizardPage):
 
         self._on_provider_changed(0)
 
+    def _toggle_details(self) -> None:
+        visible = not self.txt_details.isVisible()
+        self.txt_details.setVisible(visible)
+        self.btn_details.setText(tr("btn_hide_details") if visible else tr("btn_details"))
+
     def _on_provider_changed(self, index: int) -> None:
         p_id = self.cb_provider.currentData()
         provider = get_provider_by_id(p_id)
@@ -206,6 +224,8 @@ class AccountPage(QWizardPage):
 
     def _on_input_changed(self) -> None:
         self.lbl_test_result.setText("")
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
 
     def _on_test_connection(self) -> None:
         host = self.txt_host.text().strip()
@@ -218,6 +238,8 @@ class AccountPage(QWizardPage):
         password = self.txt_password.text()
 
         self.btn_test.setEnabled(False)
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
         self.lbl_test_result.setStyleSheet("color: blue;")
         self.lbl_test_result.setText(tr("step2_test_testing"))
 
@@ -237,11 +259,21 @@ class AccountPage(QWizardPage):
         self.btn_test.setEnabled(True)
         self.lbl_test_result.setStyleSheet("color: green; font-weight: bold;")
         self.lbl_test_result.setText(tr("step2_test_ok"))
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
 
-    def _on_test_error(self, message: str) -> None:
+    def _on_test_error(self, message: str, details: str = "") -> None:
         self.btn_test.setEnabled(True)
         self.lbl_test_result.setStyleSheet("color: red;")
         self.lbl_test_result.setText(message)
+        if details:
+            self.txt_details.setPlainText(details)
+            self.btn_details.setText(tr("btn_details"))
+            self.btn_details.setVisible(True)
+            self.txt_details.setVisible(False)
+        else:
+            self.btn_details.setVisible(False)
+            self.txt_details.setVisible(False)
 
     def validatePage(self) -> bool:
         email = self.txt_email.text().strip()
@@ -344,15 +376,7 @@ class OllamaPage(QWizardPage):
             self.cb_model.addItem("qooba/bielik-11b-v3.0-instruct")
 
     def _fetch_models(self, url: str) -> list[str]:
-        try:
-            req = urllib.request.Request(
-                f"{url.rstrip('/')}/api/tags", headers={"User-Agent": "MailVoice"}
-            )
-            with urllib.request.urlopen(req, timeout=1.5) as resp:
-                data = json.loads(resp.read().decode())
-                return [m["name"] for m in data.get("models", [])]
-        except Exception:
-            return []
+        return fetch_ollama_models(url)
 
     def get_ollama_config(self) -> OllamaConfig:
         model = self.cb_model.currentText() or "qwen3:8b"

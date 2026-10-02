@@ -540,3 +540,102 @@ def test_sent_mail_indexing_idempotency(store):
     assert len(res2.errors) == 0
     all_recs2 = store.get_all_indexed_records()
     assert len(all_recs2) == 1
+
+
+def test_pipeline_phishing_mail_handled_safely(store, monkeypatch):
+    config = AppConfig(
+        accounts=[
+            AccountConfig(
+                name="test_acc",
+                host="imap.test.local",
+                folders=["INBOX"],
+                sent_folder="Sent",
+            )
+        ],
+        importance_threshold=6,
+        ollama=OllamaConfig(lan_url="http://lan:11434"),
+    )
+
+    client = FakeMailboxClient(uidvalidity=10)
+    store.set_last_uid("test_acc", "INBOX", 10, 0)
+    raw_msg = (
+        b'From: "Bank PKO BP" <security@fakepko.xyz>\r\n'
+        b"To: me@example.com\r\n"
+        b"Subject: Pilne: blokada konta bankowego!\r\n"
+        b"Message-ID: <phish_1@fakepko.xyz>\r\n"
+        b"Date: Wed, 01 Oct 2026 12:00:00 +0000\r\n"
+        b"Authentication-Results: spf=fail dkim=fail\r\n"
+        b"Content-Type: text/plain; charset=utf-8\r\n"
+        b"\r\n"
+        b"Kliknij natychmiast: http://fakepko.xyz/login aby odblokowac konto!"
+    )
+    client.folders["INBOX"][1] = raw_msg
+
+    analyzer_called = False
+
+    def fake_classify(*args, **kwargs):
+        nonlocal analyzer_called
+        analyzer_called = True
+        raise AssertionError("Ollama classify should not be called for high-risk mail!")
+
+    ollama = OllamaClient("http://lan:11434", "http://127.0.0.1:11434")
+    monkeypatch.setattr(ollama, "classify", fake_classify)
+
+    deps = PipelineDeps(
+        config=config,
+        store=store,
+        client_factory=lambda _: client,
+        ollama_client=ollama,
+    )
+
+    res = run_cycle(deps)
+    assert len(res.errors) == 0
+    assert len(res.important) == 0
+    assert len(res.suspicious) == 1
+
+    s_mail = res.suspicious[0]
+    assert s_mail.suspicious is True
+    assert s_mail.final_importance <= 3
+    assert s_mail.risk_level == "high"
+    assert "Podejrzana wiadomość" in s_mail.summary
+    assert analyzer_called is False
+
+    recs = store.get_all_indexed_records()
+    assert len(recs) == 1
+    assert recs[0].risk == "high"
+
+
+def test_mail_index_schema_migration(tmp_path):
+    import sqlite3
+
+    db_path = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE mail_index (
+            account TEXT NOT NULL,
+            folder TEXT NOT NULL,
+            uidvalidity INTEGER NOT NULL,
+            uid INTEGER NOT NULL,
+            message_id TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            sender TEXT NOT NULL,
+            recipients TEXT NOT NULL DEFAULT '',
+            date TEXT NOT NULL,
+            importance INTEGER NOT NULL,
+            why TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            thread_key TEXT NOT NULL,
+            direction TEXT NOT NULL DEFAULT 'in',
+            PRIMARY KEY (account, folder, uidvalidity, uid)
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    s = Store(db_path)
+    cols = {row[1] for row in s.connection.execute("PRAGMA table_info(mail_index)").fetchall()}
+    assert "risk" in cols
+    assert "risk_reasons" in cols
+    s.close()

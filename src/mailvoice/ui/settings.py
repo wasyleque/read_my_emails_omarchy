@@ -31,6 +31,7 @@ from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, save_c
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
 from mailvoice.ui.i18n import get_language, tr
+from mailvoice.ui.wizard import ImapTestWorker
 from mailvoice.voice.tts import FakeSpeaker, PiperSpeaker, Speaker, VoiceUnavailable
 
 
@@ -52,6 +53,7 @@ class SettingsDialog(QDialog):
         self.secret_store = secret_store
         self.speaker = speaker or FakeSpeaker()
         self.on_config_saved = on_config_saved
+        self.worker: ImapTestWorker | None = None
 
         self.setWindowTitle(tr("settings_title"))
         self.resize(650, 480)
@@ -119,12 +121,41 @@ class SettingsDialog(QDialog):
         self.txt_password.setPlaceholderText("•••••••• (pozostaw puste, aby nie zmieniać)")
         form.addRow(tr("step2_password"), self.txt_password)
 
+        self.txt_email.textChanged.connect(self._on_account_input_changed)
+        self.txt_password.textChanged.connect(self._on_account_input_changed)
+
         layout.addLayout(form)
 
         self.lbl_help = QLabel()
         self.lbl_help.setWordWrap(True)
         self.lbl_help.setStyleSheet("color: #666; font-size: 11px;")
         layout.addWidget(self.lbl_help)
+
+        # Przycisk sprawdzania połączenia i etykieta wyniku
+        test_container = QVBoxLayout()
+        test_row = QHBoxLayout()
+        self.btn_test = QPushButton(tr("step2_test_btn"))
+        self.btn_test.clicked.connect(self._on_test_connection)
+        test_row.addWidget(self.btn_test)
+
+        self.lbl_test_result = QLabel("")
+        self.lbl_test_result.setWordWrap(True)
+        test_row.addWidget(self.lbl_test_result)
+        test_row.addStretch()
+        test_container.addLayout(test_row)
+
+        self.btn_details = QPushButton(tr("btn_details"))
+        self.btn_details.setVisible(False)
+        self.btn_details.clicked.connect(self._toggle_details)
+        test_container.addWidget(self.btn_details, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self.txt_details = QTextEdit()
+        self.txt_details.setReadOnly(True)
+        self.txt_details.setMaximumHeight(90)
+        self.txt_details.setVisible(False)
+        test_container.addWidget(self.txt_details)
+
+        layout.addLayout(test_container)
 
         # Sekcja zaawansowana
         self.acc_advanced = QGroupBox(tr("step2_advanced"))
@@ -133,9 +164,11 @@ class SettingsDialog(QDialog):
         adv_form = QFormLayout(self.acc_advanced)
 
         self.txt_host = QLineEdit()
+        self.txt_host.textChanged.connect(self._on_account_input_changed)
         adv_form.addRow(tr("step2_host"), self.txt_host)
 
         self.txt_port = QLineEdit("993")
+        self.txt_port.textChanged.connect(self._on_account_input_changed)
         adv_form.addRow(tr("step2_port"), self.txt_port)
 
         self.chk_ssl = QCheckBox("SSL / TLS")
@@ -314,6 +347,65 @@ class SettingsDialog(QDialog):
         lang = get_language()
         help_text = provider.help_text_pl if lang == "pl" else provider.help_text_en
         self.lbl_help.setText(help_text)
+
+    def _toggle_details(self) -> None:
+        visible = not self.txt_details.isVisible()
+        self.txt_details.setVisible(visible)
+        self.btn_details.setText(tr("btn_hide_details") if visible else tr("btn_details"))
+
+    def _on_account_input_changed(self) -> None:
+        self.lbl_test_result.setText("")
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
+
+    def _on_test_connection(self) -> None:
+        email = self.txt_email.text().strip()
+        pwd = self.txt_password.text()
+        if not pwd and email:
+            pwd = self.secret_store.get(email) or ""
+        host = self.txt_host.text().strip()
+        try:
+            port = int(self.txt_port.text().strip())
+        except ValueError:
+            port = 993
+
+        self.btn_test.setEnabled(False)
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
+        self.lbl_test_result.setStyleSheet("color: blue;")
+        self.lbl_test_result.setText(tr("step2_test_testing"))
+
+        self.worker = ImapTestWorker(
+            host=host,
+            port=port,
+            username=email,
+            password=pwd,
+            use_ssl=self.chk_ssl.isChecked(),
+            lang=get_language(),
+        )
+        self.worker.finished_ok.connect(self._on_test_ok)
+        self.worker.finished_error.connect(self._on_test_error)
+        self.worker.start()
+
+    def _on_test_ok(self) -> None:
+        self.btn_test.setEnabled(True)
+        self.lbl_test_result.setStyleSheet("color: green; font-weight: bold;")
+        self.lbl_test_result.setText(tr("step2_test_ok"))
+        self.btn_details.setVisible(False)
+        self.txt_details.setVisible(False)
+
+    def _on_test_error(self, message: str, details: str = "") -> None:
+        self.btn_test.setEnabled(True)
+        self.lbl_test_result.setStyleSheet("color: red;")
+        self.lbl_test_result.setText(message)
+        if details:
+            self.txt_details.setPlainText(details)
+            self.btn_details.setText(tr("btn_details"))
+            self.btn_details.setVisible(True)
+            self.txt_details.setVisible(False)
+        else:
+            self.btn_details.setVisible(False)
+            self.txt_details.setVisible(False)
 
     def _add_vip(self) -> None:
         text = self.txt_vip.text().strip()

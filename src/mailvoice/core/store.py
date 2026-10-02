@@ -32,6 +32,8 @@ class MailIndexRecord:
     why: str | None
     summary: str | None
     direction: str = "in"
+    risk: str = "low"
+    risk_reasons: str = ""
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,8 @@ class Store:
                 why TEXT,
                 summary TEXT,
                 direction TEXT NOT NULL DEFAULT 'in',
+                risk TEXT NOT NULL DEFAULT 'low',
+                risk_reasons TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY(account, folder, uidvalidity, uid)
             )
         """)
@@ -199,11 +203,17 @@ class Store:
         if "attempts" not in seen_cols:
             cursor.execute("ALTER TABLE seen ADD COLUMN attempts INTEGER DEFAULT 0")
 
-        # Migracja tabeli mail_index jeśli kolumna direction nie istnieje
+        # Migracja tabeli mail_index jeśli kolumny direction, risk, risk_reasons nie istnieją
         cursor.execute("PRAGMA table_info(mail_index)")
         mail_index_cols = [row[1] for row in cursor.fetchall()]
         if mail_index_cols and "direction" not in mail_index_cols:
             cursor.execute("ALTER TABLE mail_index ADD COLUMN direction TEXT NOT NULL DEFAULT 'in'")
+        if mail_index_cols and "risk" not in mail_index_cols:
+            cursor.execute("ALTER TABLE mail_index ADD COLUMN risk TEXT NOT NULL DEFAULT 'low'")
+        if mail_index_cols and "risk_reasons" not in mail_index_cols:
+            cursor.execute(
+                "ALTER TABLE mail_index ADD COLUMN risk_reasons TEXT NOT NULL DEFAULT ''"
+            )
 
         self.connection.commit()
 
@@ -362,8 +372,9 @@ class Store:
             """
             INSERT OR REPLACE INTO mail_index
                 (account, folder, uidvalidity, uid, message_id, thread_key,
-                 date, sender, recipients, subject, importance, why, summary, direction)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 date, sender, recipients, subject, importance, why, summary, direction,
+                 risk, risk_reasons)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.account,
@@ -380,6 +391,8 @@ class Store:
                 record.why,
                 record.summary,
                 record.direction,
+                record.risk,
+                record.risk_reasons,
             ),
         )
 
@@ -449,7 +462,8 @@ class Store:
         cursor.execute(
             """
             SELECT account, folder, uidvalidity, uid, message_id, thread_key,
-                   date, sender, recipients, subject, importance, why, summary, direction
+                   date, sender, recipients, subject, importance, why, summary, direction,
+                   risk, risk_reasons
             FROM mail_index
             WHERE account = ? AND folder = ? AND uidvalidity = ? AND uid = ?
             """,
@@ -466,7 +480,8 @@ class Store:
         cursor.execute(
             """
             SELECT account, folder, uidvalidity, uid, message_id, thread_key,
-                   date, sender, recipients, subject, importance, why, summary, direction
+                   date, sender, recipients, subject, importance, why, summary, direction,
+                   risk, risk_reasons
             FROM mail_index
             WHERE thread_key = ?
             ORDER BY date ASC, uid ASC
@@ -481,7 +496,8 @@ class Store:
         """Zwraca wpisy z indeksu z opcjonalnym filtrem zakresu dat ISO 8601."""
         query = (
             "SELECT account, folder, uidvalidity, uid, message_id, thread_key, "
-            "date, sender, recipients, subject, importance, why, summary, direction "
+            "date, sender, recipients, subject, importance, why, summary, direction, "
+            "risk, risk_reasons "
             "FROM mail_index"
         )
         params: list[str] = []
@@ -648,7 +664,8 @@ class Store:
 
         sql = (
             "SELECT account, folder, uidvalidity, uid, message_id, thread_key, "
-            "date, sender, recipients, subject, importance, why, summary, direction "
+            "date, sender, recipients, subject, importance, why, summary, direction, "
+            "risk, risk_reasons "
             "FROM mail_index WHERE (" + " OR ".join(conditions) + ")"
         )
         if since:
@@ -659,6 +676,12 @@ class Store:
 
         cur.execute(sql, params)
         return [MailIndexRecord(*row) for row in cur.fetchall()]
+
+    def get_all_contact_addresses(self) -> list[str]:
+        """Zwraca listę wszystkich adresów e-mail z książki kontaktów."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT address FROM contact_addresses")
+        return [row[0] for row in cursor.fetchall()]
 
     def close(self):
         if self.connection:

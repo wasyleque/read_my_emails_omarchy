@@ -92,6 +92,14 @@ class SearchResults:
     hits: list[SearchHit]
 
 
+@dataclass(frozen=True)
+class SuspiciousMail:
+    """Zdarzenie wykrycia podejrzanej wiadomości (phishing / malware)."""
+
+    mail: ProcessedMail
+    reasons: tuple[str, ...]
+
+
 # Alias dla kompatybilności wstecznej
 Error = ServiceError
 
@@ -104,6 +112,7 @@ Event = (
     | DigestReady
     | ContactCardReady
     | SearchResults
+    | SuspiciousMail
 )
 
 
@@ -220,6 +229,9 @@ class MailService:
         if result.important:
             action = self.notifier.on_important_mail(len(result.important))
             self._emit(NewImportant(items=result.important, action=action))
+
+        for s_mail in result.suspicious:
+            self._emit(SuspiciousMail(mail=s_mail, reasons=s_mail.risk_reasons))
 
         return result
 

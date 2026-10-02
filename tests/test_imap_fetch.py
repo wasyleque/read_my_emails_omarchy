@@ -2,13 +2,15 @@
 
 from datetime import date
 from email.message import EmailMessage
-from typing import Sequence
+from typing import Any, Sequence
 
 import pytest
 
 from mailvoice.core.imap_fetch import (
     FetchError,
     ImapToolsClient,
+    _extract_mime_parts,
+    _parse_s_expression,
     commit_progress,
     fetch_backlog,
     fetch_new,
@@ -16,6 +18,7 @@ from mailvoice.core.imap_fetch import (
     fetch_sent_message_ids,
     normalize_message_id,
 )
+from mailvoice.core.mailparse import parse_raw
 from mailvoice.core.store import Store
 
 
@@ -75,11 +78,20 @@ class FakeMailboxClient:
         unseen = self.unseen_uids.get(folder, set())
         return sorted(list(unseen))
 
-    def fetch_raw_batch(self, folder: str, uids: Sequence[int]) -> list[tuple[int, bytes]]:
+    def fetch_raw_batch(self, folder: str, uids: Sequence[int]) -> list[tuple[int, Any]]:
         if folder not in self.folders:
             raise FetchError(f"Folder '{folder}' does not exist")
         folder_emails = self.folders.get(folder, {})
-        return [(uid, folder_emails[uid]) for uid in uids if uid in folder_emails]
+        return [(uid, parse_raw(folder_emails[uid])) for uid in uids if uid in folder_emails]
+
+    def fetch_message_body(self, folder: str, uid: int) -> str | None:
+        if folder not in self.folders:
+            raise FetchError(f"Folder '{folder}' does not exist")
+        folder_emails = self.folders.get(folder, {})
+        if uid not in folder_emails:
+            return None
+        parsed = parse_raw(folder_emails[uid])
+        return parsed.body_text
 
     def get_sent_message_ids(self, folder: str, since_date: date) -> list[str]:
         if folder not in self.folders:
@@ -278,3 +290,106 @@ def test_fetch_sent_for_index_limit(store):
     # Powinny być najnowsze UID (10, 11, 12, 13, 14)
     uids = [item[0] for item in items]
     assert uids == [10, 11, 12, 13, 14]
+
+
+def test_parse_s_expression():
+    expr = '("TEXT" "PLAIN" ("CHARSET" "utf-8") NIL NIL "7BIT" 100 10)'
+    parsed = _parse_s_expression(expr)
+    assert isinstance(parsed, list)
+    assert parsed[0] == "TEXT"
+    assert parsed[1] == "PLAIN"
+    assert parsed[2] == ["CHARSET", "utf-8"]
+    assert parsed[3] is None
+
+    multipart_expr = (
+        '(("TEXT" "PLAIN" ("CHARSET" "utf-8") NIL NIL "7BIT" 50 5 NIL NIL NIL NIL)'
+        '("APPLICATION" "OCTET-STREAM" ("NAME" "file.pdf") NIL NIL "BASE64" 1000 NIL '
+        '("ATTACHMENT" ("FILENAME" "file.pdf")) NIL NIL) "MIXED")'
+    )
+    m_parsed = _parse_s_expression(multipart_expr)
+    assert isinstance(m_parsed, list)
+    assert len(m_parsed) == 3
+    assert m_parsed[2] == "MIXED"
+
+    text_parts, attachments = _extract_mime_parts(m_parsed)
+    assert len(text_parts) == 1
+    assert text_parts[0][0] == "1"
+    assert text_parts[0][1] == "PLAIN"
+    assert len(attachments) == 1
+    assert attachments[0].name == "file.pdf"
+    assert attachments[0].content_type == "application/octet-stream"
+    assert attachments[0].size == 1000
+
+
+def test_attachments_bytes_never_downloaded():
+    from unittest.mock import MagicMock
+
+    client = ImapToolsClient("imap.example.com", 993, "user@example.com", "pass", use_ssl=True)
+    fake_mailbox = MagicMock()
+
+    # IMAP BODYSTRUCTURE z dużą zawartością binarną
+    bodystructure = (
+        b'1 (BODYSTRUCTURE (("TEXT" "PLAIN" ("CHARSET" "utf-8") NIL NIL "7BIT" '
+        b"20 2 NIL NIL NIL NIL)"
+        b'("APPLICATION" "OCTET-STREAM" ("NAME" "trojan.exe") NIL NIL "BASE64" 5000000 NIL '
+        b'("ATTACHMENT" ("FILENAME" "trojan.exe")) NIL NIL) "MIXED") '
+        b"BODY[HEADER] {70}\r\n"
+        b"Message-ID: <threat@evil.com>\r\n"
+        b"From: hacker@evil.com\r\n"
+        b"Subject: Phish\r\n\r\n)"
+    )
+    header_bytes = (
+        b"Message-ID: <threat@evil.com>\r\nFrom: hacker@evil.com\r\nSubject: Phish\r\n\r\n"
+    )
+
+    commands_called = []
+
+    def mock_uid(cmd, uid, args):
+        commands_called.append((cmd, uid, args))
+        if "BODYSTRUCTURE" in args:
+            return "OK", [(bodystructure, header_bytes)]
+        if "BODY.PEEK[1]" in args:
+            return "OK", [(b"1 (BODY[1] {11}", b"Hello world")]
+        return "OK", []
+
+    fake_mailbox.client.uid.side_effect = mock_uid
+
+    parsed = client._fetch_safe_mail(fake_mailbox, 1)
+    assert parsed is not None
+    assert parsed.message_id == "<threat@evil.com>"
+    assert parsed.body_text == "Hello world"
+    assert len(parsed.attachments) == 1
+    assert parsed.attachments[0].name == "trojan.exe"
+    assert parsed.attachments[0].size == 5000000
+
+    # Sprawdzamy czy żaden FETCH nie zażądał części 2 (załącznika)
+    for cmd, uid, args in commands_called:
+        assert "BODY.PEEK[2]" not in args
+        assert "RFC822" not in args
+        assert "BODY[]" not in args
+
+
+def test_fetch_safe_mail_fallback_headers_only():
+    from unittest.mock import MagicMock
+
+    client = ImapToolsClient("imap.example.com", 993, "user@example.com", "pass", use_ssl=True)
+    fake_mailbox = MagicMock()
+
+    header_bytes = (
+        b"Message-ID: <safe@example.com>\r\nFrom: boss@example.com\r\nSubject: Urgent\r\n\r\n"
+    )
+
+    def mock_uid(cmd, uid, args):
+        if "BODYSTRUCTURE" in args:
+            return "BAD", []
+        if "HEADER" in args:
+            return "OK", [(b"1 (BODY[HEADER] {60}", header_bytes)]
+        return "OK", []
+
+    fake_mailbox.client.uid.side_effect = mock_uid
+
+    parsed = client._fetch_safe_mail(fake_mailbox, 42)
+    assert parsed is not None
+    assert parsed.message_id == "<safe@example.com>"
+    assert parsed.body_text == "[Treść niedostępna — bezpieczny tryb]"
+    assert parsed.attachments == ()

@@ -24,7 +24,9 @@ from mailvoice.core.service import (
     MailService,
     NewImportant,
     SearchResults,
+    SuspiciousMail,
 )
+from mailvoice.core.summarizer import filter_urls
 from mailvoice.core.summarizer import summarize as core_summarize
 from mailvoice.voice.beeper import Beeper, FakeBeeper
 from mailvoice.voice.stt import Listener
@@ -203,7 +205,8 @@ class VoiceDialog:
 
     def _speak_safely(self, text: str, lang: str) -> None:
         try:
-            self.speaker.speak(text, lang=lang)
+            safe_text = filter_urls(text)
+            self.speaker.speak(safe_text, lang=lang)
         except VoiceUnavailable:
             pass
 
@@ -242,6 +245,17 @@ class VoiceDialog:
                 self.beeper.beep()
             else:
                 self._handle_new_important_flow(event.items, lang)
+            return
+
+        if isinstance(event, SuspiciousMail):
+            warning = (
+                f"Uwaga, odebrano podejrzaną wiadomość od {event.mail.mail.sender}. "
+                "Szczegóły na ekranie."
+                if lang == "pl"
+                else f"Warning: suspicious message received from {event.mail.mail.sender}. "
+                "Details on screen."
+            )
+            self._speak_safely(warning, lang)
             return
 
         if isinstance(event, BacklogQuestion):
@@ -376,20 +390,36 @@ class VoiceDialog:
         while idx < total:
             item = items[idx]
             mail_lang = item.language if item.language in ("pl", "en") else lang
-            summary = self.summarizer_fn(item.mail, mail_lang)
 
-            if mail_lang == "en":
-                header = (
-                    f"Message {idx + 1} of {total}. "
-                    f"From {item.mail.sender}. Subject: {item.mail.subject}. "
-                )
+            if item.suspicious:
+                if mail_lang == "en":
+                    warning = (
+                        f"Message {idx + 1} of {total}. "
+                        f"From {item.mail.sender}. Subject: {item.mail.subject}. "
+                        "Warning, this message looks suspicious, not reading its content."
+                    )
+                else:
+                    warning = (
+                        f"Wiadomość {idx + 1} z {total}. "
+                        f"Od {item.mail.sender}. Temat: {item.mail.subject}. "
+                        "Uwaga, ta wiadomość wygląda na podejrzaną, nie czytam jej treści."
+                    )
+                self._speak_safely(warning, mail_lang)
             else:
-                header = (
-                    f"Wiadomość {idx + 1} z {total}. "
-                    f"Od {item.mail.sender}. Temat: {item.mail.subject}. "
-                )
+                summary = self.summarizer_fn(item.mail, mail_lang)
 
-            self._speak_safely(header + summary, mail_lang)
+                if mail_lang == "en":
+                    header = (
+                        f"Message {idx + 1} of {total}. "
+                        f"From {item.mail.sender}. Subject: {item.mail.subject}. "
+                    )
+                else:
+                    header = (
+                        f"Wiadomość {idx + 1} z {total}. "
+                        f"Od {item.mail.sender}. Temat: {item.mail.subject}. "
+                    )
+
+                self._speak_safely(header + summary, mail_lang)
 
             if idx + 1 < total:
                 continue_prompt = "Czytać dalej?" if mail_lang == "pl" else "Continue?"

@@ -20,6 +20,7 @@ from mailvoice.core.service import (
     NewImportant,
     SearchResults,
     ServiceError,
+    SuspiciousMail,
 )
 from mailvoice.core.store import MailIndexRecord, Store
 from tests.test_imap_fetch import FakeMailboxClient
@@ -377,3 +378,49 @@ def test_service_ai_search_emits_search_results(store, secret_store):
     assert isinstance(events[0], SearchResults)
     assert events[0].query == "faktura za serwer"
     assert len(events[0].hits) == 1
+
+
+def test_service_suspicious_mail_triggers_event(store, secret_store):
+    clock = FakeClock()
+    config = AppConfig(
+        accounts=[AccountConfig(name="acc1", host="imap.local", folders=["INBOX"])],
+        importance_threshold=6,
+        notify_mode="beep",
+    )
+    secret_store.set("acc1", "Haslo123")
+
+    client = FakeMailboxClient(uidvalidity=1)
+    store.set_last_uid("acc1", "INBOX", 1, 0)
+
+    phish_bytes = (
+        b'From: "Bank PKO BP" <security@fakepko.xyz>\r\n'
+        b"To: me@example.com\r\n"
+        b"Subject: Pilne: blokada konta!\r\n"
+        b"Message-ID: <phish_srv_1@fakepko.xyz>\r\n"
+        b"Date: Wed, 01 Oct 2026 12:00:00 +0000\r\n"
+        b"Authentication-Results: spf=fail dkim=fail\r\n"
+        b"Content-Type: text/plain; charset=utf-8\r\n"
+        b"\r\n"
+        b"Kliknij: http://fakepko.xyz/login"
+    )
+    client.folders["INBOX"][1] = phish_bytes
+
+    ollama = OllamaClient("http://lan:11434", "http://127.0.0.1:11434")
+    service = MailService(
+        config=config,
+        store=store,
+        secret_store=secret_store,
+        ollama_client=ollama,
+        client_factory=lambda _: client,
+        clock=clock,
+    )
+
+    res = service.trigger_cycle()
+    assert len(res.suspicious) == 1
+    assert len(res.important) == 0
+
+    events = service.poll_events()
+    suspicious_events = [e for e in events if isinstance(e, SuspiciousMail)]
+    assert len(suspicious_events) == 1
+    assert suspicious_events[0].mail.mail.message_id == "<phish_srv_1@fakepko.xyz>"
+    assert len(suspicious_events[0].reasons) > 0

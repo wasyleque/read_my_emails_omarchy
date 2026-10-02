@@ -1,10 +1,20 @@
 import email
 import email.policy
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from email.utils import getaddresses, parsedate_to_datetime
 
 from mailvoice.core.textutil import clean_body, html_to_text
+
+
+@dataclass(frozen=True)
+class AttachmentInfo:
+    """Metadane załącznika (nazwa, typ, rozmiar w bajtach; treść nie jest pobierana)."""
+
+    name: str
+    content_type: str
+    size: int
 
 
 @dataclass(frozen=True)
@@ -18,6 +28,11 @@ class ParsedMail:
     body_text: str
     to: tuple[str, ...] = ()
     cc: tuple[str, ...] = ()
+    attachments: tuple[AttachmentInfo, ...] = ()
+    reply_to: str | None = None
+    authentication_results: str | None = None
+    return_path: str | None = None
+    links: tuple[str, ...] = ()
 
 
 def parse_raw(raw: bytes) -> ParsedMail:
@@ -73,6 +88,69 @@ def parse_raw(raw: bytes) -> ParsedMail:
     to_addrs = _extract_addrs("to")
     cc_addrs = _extract_addrs("cc")
 
+    reply_to = str(msg.get("Reply-To", "")).strip() or None
+    authentication_results = str(msg.get("Authentication-Results", "")).strip() or None
+    return_path = str(msg.get("Return-Path", "")).strip() or None
+
+    # Wykrywanie załączników (tylko metadane, bez przechowywania treści)
+    attachments_list: list[AttachmentInfo] = []
+    ignored_types = {
+        "text/plain",
+        "text/html",
+        "multipart/mixed",
+        "multipart/alternative",
+        "multipart/related",
+        "multipart/signed",
+    }
+    for part in msg.walk():
+        cd = str(part.get("Content-Disposition", ""))
+        fn = part.get_filename()
+        ct = part.get_content_type()
+        is_att = (
+            "attachment" in cd.lower()
+            or bool(fn)
+            or (ct not in ignored_types and "inline" not in cd.lower())
+        )
+        if is_att:
+            name = fn or "unnamed"
+            payload = part.get_payload()
+            size = len(payload) if isinstance(payload, (bytes, str)) else 0
+            attachments_list.append(AttachmentInfo(name=name, content_type=ct, size=size))
+
+    # Wyciąganie linków z części HTML oraz tekstu (bez ich odwiedzania)
+    url_re = re.compile(r"https?://[^\s<>\"')]+|www\.[^\s<>\"')]+", re.IGNORECASE)
+    href_re = re.compile(r'href=[\'"]([^\'"]+)[\'"]', re.IGNORECASE)
+    extracted_links: list[str] = []
+
+    has_html = False
+    for part in msg.walk():
+        ct = part.get_content_type()
+        if ct == "text/html":
+            has_html = True
+            try:
+                html_c = part.get_content()
+                for href in href_re.findall(html_c):
+                    clean_h = href.strip()
+                    if clean_h and clean_h not in extracted_links:
+                        extracted_links.append(clean_h)
+            except Exception:
+                pass
+        elif ct == "text/plain":
+            try:
+                plain_c = part.get_content()
+                for u in url_re.findall(plain_c):
+                    clean_u = u.strip()
+                    if clean_u and clean_u not in extracted_links:
+                        extracted_links.append(clean_u)
+            except Exception:
+                pass
+
+    if not has_html and body_text:
+        for u in url_re.findall(body_text):
+            clean_u = u.strip()
+            if clean_u and clean_u not in extracted_links:
+                extracted_links.append(clean_u)
+
     return ParsedMail(
         message_id=message_id,
         sender=sender,
@@ -83,4 +161,9 @@ def parse_raw(raw: bytes) -> ParsedMail:
         body_text=body_text,
         to=to_addrs,
         cc=cc_addrs,
+        attachments=tuple(attachments_list),
+        reply_to=reply_to,
+        authentication_results=authentication_results,
+        return_path=return_path,
+        links=tuple(extracted_links),
     )

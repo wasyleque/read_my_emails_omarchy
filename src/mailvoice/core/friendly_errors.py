@@ -1,5 +1,6 @@
 """Tłumaczenie technicznych błędów połączeń i logowania na czytelne komunikaty."""
 
+import re
 import socket
 import ssl
 from typing import Any
@@ -124,8 +125,35 @@ def format_friendly_error(exc: Any, lang: str = "pl") -> str:
             "Please check folder configuration in account settings."
         )
 
-    # Domyślny przyjazny komunikat
-    clean_msg = str(exc).strip()
+    # Domyślny przyjazny komunikat dla nieznanych wyjątków
     if is_pl:
-        return f"Wystąpił nieoczekiwany problem z połączeniem: {clean_msg}"
-    return f"An unexpected connection issue occurred: {clean_msg}"
+        return "Coś poszło nie tak. Spróbuj ponownie. Jeśli problem wraca, kliknij Szczegóły."
+    return "Something went wrong. Please try again. If the problem persists, click Details."
+
+
+def sanitize_error_details(exc: Any) -> str:
+    """Tworzy bezpieczne podsumowanie techniczne błędu bez haseł i treści maili."""
+    if exc is None:
+        return "Brak szczegółów technicznych."
+
+    exc_type = type(exc).__name__ if isinstance(exc, BaseException) else "Error"
+    raw_desc = str(exc).strip()
+
+    # Usunięcie haseł i tokenów z opisu technicznego
+    clean_desc = re.sub(
+        r"(?:password|hasło|haslo|secret|token|passwd|pwd)[\s:=]+[^\s,;]+",
+        "[UKRYTE_HASŁO]",
+        raw_desc,
+        flags=re.IGNORECASE,
+    )
+    if len(clean_desc) > 300:
+        clean_desc = clean_desc[:300] + "..."
+
+    return f"Typ błędu: {exc_type}\nSzczegóły: {clean_desc}"
+
+
+def format_friendly_error_ex(exc: Any, lang: str = "pl") -> tuple[str, str]:
+    """Zwraca parę: (prosty komunikat dla użytkownika, bezpieczne szczegóły techniczne)."""
+    friendly = format_friendly_error(exc, lang=lang)
+    details = sanitize_error_details(exc)
+    return friendly, details

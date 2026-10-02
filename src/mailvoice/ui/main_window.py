@@ -32,6 +32,7 @@ from mailvoice.core.config import AppConfig, save_config
 from mailvoice.core.contacts import ContactCard
 from mailvoice.core.digest import Digest, Topic
 from mailvoice.core.friendly_errors import format_friendly_error
+from mailvoice.core.phishing import defang_url
 from mailvoice.core.pipeline import CycleResult, PendingBacklog, ProcessedMail
 from mailvoice.core.service import (
     AskReminder,
@@ -44,6 +45,7 @@ from mailvoice.core.service import (
     NewImportant,
     SearchResults,
     ServiceError,
+    SuspiciousMail,
 )
 from mailvoice.core.summarizer import summarize
 from mailvoice.ui.i18n import get_language, tr
@@ -389,19 +391,39 @@ class MainWindow(QMainWindow):
             for item in result.important:
                 self._add_important_mail(item)
 
+        if result.suspicious:
+            for item in result.suspicious:
+                self._add_important_mail(item)
+
     def _on_cycle_error(self, err_msg: str) -> None:
         self.btn_check_now.setEnabled(True)
         friendly = format_friendly_error(err_msg, lang=get_language())
         self.lbl_status.setText(f"Problem: {friendly}")
 
     def _add_important_mail(self, item: ProcessedMail) -> None:
+        if any(
+            x.account == item.account and x.folder == item.folder and x.uid == item.uid
+            for x in self.important_items
+        ):
+            return
         self.important_items.append(item)
         row = self.tbl_mails.rowCount()
         self.tbl_mails.insertRow(row)
 
-        reason = item.analysis_reason or "; ".join(item.rule_reasons)
-        self.tbl_mails.setItem(row, 0, QTableWidgetItem(item.mail.sender))
-        self.tbl_mails.setItem(row, 1, QTableWidgetItem(item.mail.subject))
+        sender_text = item.mail.sender
+        subject_text = item.mail.subject
+        if item.suspicious:
+            sender_text = f"⚠ {sender_text}"
+            subject_text = f"[{tr('badge_suspicious')}] {subject_text}"
+            reasons_str = (
+                "; ".join(item.risk_reasons) if item.risk_reasons else item.analysis_reason
+            )
+            reason = f"{tr('badge_suspicious')}: {reasons_str}"
+        else:
+            reason = item.analysis_reason or "; ".join(item.rule_reasons)
+
+        self.tbl_mails.setItem(row, 0, QTableWidgetItem(sender_text))
+        self.tbl_mails.setItem(row, 1, QTableWidgetItem(subject_text))
         self.tbl_mails.setItem(row, 2, QTableWidgetItem(reason))
 
         btn_listen = QPushButton(tr("btn_listen_summary"))
@@ -413,6 +435,25 @@ class MainWindow(QMainWindow):
         if not self.speaker:
             return
         lang = item.language if item.language in ("pl", "en") else get_language()
+
+        if item.suspicious:
+            if lang == "pl":
+                msg = "Uwaga, ta wiadomość wygląda na podejrzaną, nie czytam jej treści."
+            else:
+                msg = "Warning: this message looks suspicious, not reading its content."
+            try:
+                self.speaker.speak(msg, lang=lang)
+            except VoiceUnavailable:
+                pass
+            reasons_list = [defang_url(r) for r in item.risk_reasons]
+            reasons_formatted = "\n• " + "\n• ".join(reasons_list) if reasons_list else ""
+            info = (
+                f"{tr('suspicious_warning_dialog')}\n\n"
+                f"{tr('suspicious_reasons_title')}{reasons_formatted}"
+            )
+            QMessageBox.warning(self, tr("badge_suspicious"), info)
+            return
+
         if self.service:
             try:
                 summary = summarize(
@@ -470,6 +511,11 @@ class MainWindow(QMainWindow):
         if isinstance(event, NewImportant):
             for item in event.items:
                 self._add_important_mail(item)
+            if self.voice_dialog and not self._is_muted:
+                self.voice_dialog.handle_event(event)
+
+        elif isinstance(event, SuspiciousMail):
+            self._add_important_mail(event.mail)
             if self.voice_dialog and not self._is_muted:
                 self.voice_dialog.handle_event(event)
 
@@ -538,32 +584,41 @@ class MainWindow(QMainWindow):
 
     def _display_contact_card(self, card: ContactCard | None, sender: str) -> None:
         """Wyświetla podsumowanie karty kontaktu w panelu kontekstu."""
+        import html
+
         self.current_context_card = card
+        safe_sender = html.escape(defang_url(sender))
         if card is None:
             self.lbl_context_details.setText(
                 f"<span style='color: #666;'>{tr('context_unknown_sender')}</span><br>"
-                f"<span style='font-size: 11px; color: #888;'>Adres: {sender}</span>"
+                f"<span style='font-size: 11px; color: #888;'>Adres: {safe_sender}</span>"
             )
             self.btn_context_search.setText(tr("btn_search_ai"))
             self.btn_context_search.setEnabled(True)
             return
 
+        safe_name = html.escape(card.name)
+        safe_addrs = html.escape(", ".join(defang_url(a) for a in card.addresses))
         lines = [
-            f"<b>{card.name}</b> <span style='color: #666;'>({', '.join(card.addresses)})</span>",
+            f"<b>{safe_name}</b> <span style='color: #666;'>({safe_addrs})</span>",
         ]
         if card.relationship_hint:
-            lines.append(f"<b>{tr('context_relationship')}</b> {card.relationship_hint}")
+            safe_hint = html.escape(defang_url(card.relationship_hint))
+            lines.append(f"<b>{tr('context_relationship')}</b> {safe_hint}")
         if card.why_it_matters:
-            lines.append(f"<b>{tr('col_reason')}:</b> {card.why_it_matters}")
+            safe_why = html.escape(defang_url(card.why_it_matters))
+            lines.append(f"<b>{tr('col_reason')}:</b> {safe_why}")
         if card.open_items:
-            open_str = "; ".join(card.open_items)
+            open_str = html.escape("; ".join(defang_url(item) for item in card.open_items))
             lines.append(f"<b>{tr('context_open_items')}</b> {open_str}")
         if card.last_exchange:
             _, dir_text, s_text = card.last_exchange[0]
-            lines.append(f"<b>{tr('context_last_exchange')}</b> {dir_text}: {s_text}")
+            safe_dt = html.escape(dir_text)
+            safe_st = html.escape(defang_url(s_text))
+            lines.append(f"<b>{tr('context_last_exchange')}</b> {safe_dt}: {safe_st}")
 
         self.lbl_context_details.setText("<br>".join(lines))
-        self.btn_context_search.setText(f"{tr('btn_search_ai')} ({card.name})")
+        self.btn_context_search.setText(f"{tr('btn_search_ai')} ({safe_name})")
         self.btn_context_search.setEnabled(True)
 
     def _on_context_search_clicked(self) -> None:

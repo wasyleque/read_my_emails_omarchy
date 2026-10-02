@@ -35,6 +35,7 @@ Pakowanie: PyInstaller (.exe) / AppImage — na końcu.
 3. Przed zakończeniem MUSI przejść: `ruff check . && pytest -q`.
 4. Komentarze i teksty UI po polsku (z możliwością tłumaczenia), identyfikatory po angielsku.
 5. Nie twierdź, że test przeszedł, jeśli nie widziałeś tego w wyjściu komendy.
+6. Zasady bezpieczeństwa: patrz SECURITY.md (nienaruszalne).
 
 ## Zasady UX (wymóg użytkownika: interfejs „dla opornych”)
 - Pierwsze uruchomienie = **kreator krok po kroku** (konta -> test połączenia -> opis „co jest dla mnie ważne” -> głos -> gotowe).
@@ -111,3 +112,38 @@ Decyzje z etapu naprawy indeksu i dwukierunkowości (batch 5):
 - Wymiany dwukierunkowe w `digest.py` i `contacts.py`: formatowanie "Ty → Odbiorca" oraz "Nadawca → Ty".
 - Karta kontaktu (`contacts.py`): otwarte sprawy rozróżniają stan oczekiwania ("Czeka na Ciebie: ..." vs "Czeka na kontakt (Nazwa): ..."). `last_contact` jest wyznaczany z obu kierunków, a kontakty są rozpoznawane również z nagłówków `recipients` wiadomości wychodzących.
 
+Decyzje z etapu bezpieczeństwa i antyphishingu (batch 6):
+- Bezpieczny odczyt IMAP (`imap_fetch.py`): pobieranie tylko nagłówków i części tekstowych (`BODYSTRUCTURE` + `BODY.PEEK[części]`) z limitem 256 KB. Bajty załączników NIGDY nie są pobierane ze skrzynki; metadane załączników są zapisywane jako `AttachmentInfo`.
+- Oczyszczanie tekstu HTML i niewidoczne elementy (`textutil.py`): usuwanie ukrytego tekstu (`display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`, `font-size:1px`, `hidden`, `aria-hidden`, biały tekst na białym tle, komentarze HTML, `<script>`, `<style>`, `<noscript>`, `<template>`, znaki zerowej szerokości U+200B..U+200F, U+2060, U+FEFF, bidi override U+202A..U+202E, znaki tagów U+E0000..). Zwracanie flag `HiddenTextFlags` przez `html_to_text_ex`.
+- Ochrona przed prompt injection i izolacja promptów (`analyzer.py`, `summarizer.py`): dane maila opakowywane w blok niezaufany z losowym jednorazowym ogranicznikiem `<<<MAIL_DANE_NIEZAUFANE_{nonce}>>> ... <<<KONIEC_{nonce}>>>` z neutralizacją ogranicznika w treści. Filtrowanie i defangowanie wszystkich URL-i w streszczeniach (`[link pominięty]`).
+- Moduł oceny ryzyka phishingu (`phishing.py`): ocena `assess()` wyliczająca ryzyko ('low' | 'medium' | 'high'), punktację i powody po ludzku (PL). Wykrywanie: rozbieżności From vs display-name, domen Reply-To, wyników Authentication-Results SPF/DKIM/DMARC, linków z rozbieżnym tekstem widocznym i adresem docelowym, skracaczy linków, IP, punycode/homoglifów i odległości Levenshteina od znanych domen, słów kluczowych wymuszeń/płatności/kradzieży danych (PL+EN), presji czasu, ryzykownych rozszerzeń (.exe, .scr, .vbs, podwójnych rozszerzeń typu .pdf.exe, archiwów z hasłem w treści), ukrytego tekstu oraz wzorców prompt injection.
+- Integracja z pipeline i bazą (`store.py`, `pipeline.py`): kolumny `risk` i `risk_reasons` w `mail_index` z automatyczną migracją. Dla `risk='high'`: flaga `suspicious=True`, przycięcie ważności do <=3, pominięcie LLM oraz summarizera, wysłanie zdarzenia `SuspiciousMail` zamiast `NewImportant`.
+- Głos i GUI: `VoiceDialog` ostrzega głosem o podejrzanej wiadomości i pomija czytanie jej treści. Metoda `_speak_safely` usuwa adresy URL przed syntezą mowy. Komendy głosowe przyjmowane wyłącznie z mikrofonu przez `Listener` (odporność na wstrzyknięcie tekstu w mailu). W GUI: etykieta „⚠ Podejrzany”, defangowanie adresów linków (`defang_url`), brak renderowania HTML ani otwierania linków (brak `webbrowser`, `QDesktopServices.openUrl`, blokada zewnętrznych połączeń).
+- Statyczny test AST (`tests/test_security_static.py`): automatyczna weryfikacja zakazu użycia `webbrowser`, `QDesktopServices.openUrl`, `setOpenExternalLinks(True)`, `QTextBrowser`/`QWebEngine` z siecią, oraz `httpx`/`requests`/`urllib.request` poza `analyzer.py`.
+- Obsługa błędów i Zasady UX (`friendly_errors.py`, `wizard.py`, `settings.py`): nieznane wyjątki wyświetlają przyjazny komunikat („Coś poszło nie tak...”) z rozwijanymi szczegółami technicznymi bez haseł i treści maili (`sanitize_error_details`). Test kontraktowy (`tests/test_client_contracts.py`) weryfikujący spójność wywołań metod klientów IMAP i Ollama w całym kodzie.
+
+
+
+
+## STAN NA KONIEC SESJI (2026-10-02) — jak wznowić w pracy
+Zrobione i zweryfikowane (251 testów, ruff czysty): E0–E13 (rdzeń, sejf, głos, GUI, digest, karty kontaktu, wyszukiwanie AI,
+indeksowanie wysłanych) oraz partia 6 antyphishing (bezpieczny fetch BODYSTRUCTURE bez załączników, ukryty tekst,
+ochrona przed prompt injection, `core/phishing.py`, test statyczny). Repo publiczne, `main` jest aktualny.
+
+**Najpierw (priorytet):**
+1. `git pull`, `source .venv/bin/activate`, `python -m mailvoice` — dodaj KONTO TESTOWE (O2: IMAP włączony, login = pełny adres e-mail).
+   Poprawka kreatora („Sprawdź połączenie”) jest w repo.
+2. `python tools/smoke_test.py --days 7` — wypisuje tylko liczby; wynik można wkleić do rozmowy (bez danych osobistych).
+3. Zweryfikować NA PRAWDZIWYM serwerze: parser BODYSTRUCTURE w `imap_fetch.py` (testowany tylko na fake'ach — serwery różnie
+   formatują odpowiedź), nazwa folderu Wysłane (O2: „Wysłane”), dowód read-only (flagi nietknięte).
+4. Ollama: serwer jest w pracy (LAN `192.168.0.11` — w repo zamienione na 192.168.1.50; ustaw w Ustawieniach). Z domu tylko VPN.
+
+**Następna partia gotowa do wysłania agy:** `logs/agy_batch7_prompt.md` (auto-discovery Ollamy w sieci + zewnętrzni dostawcy AI,
+opt-in; zasady w SECURITY.md). Wysłanie: `herdr agent prompt <pane agy> "Przeczytaj .../logs/agy_batch7_prompt.md i wykonaj..."`.
+Pane agy to było `w8:p3` — w nowej sesji sprawdź `herdr agent list`; agy odpala użytkownik w panelu (klasyfikator blokuje
+`--dangerously-skip-permissions` z Basha Claude). Status Herdr bywa przedwczesny — weryfikuj po plikach i testach.
+
+**Otwarte (GitHub Issues):** #3 test na prawdziwych skrzynkach, #4 FIDO2 na sprzęcie/Windows, #5 głos na prawdziwym audio,
+#9 antyphishing (wdrożone, czeka na test na prawdziwej poczcie), #10 discovery + dostawcy zewnętrzni.
+**Nieprzetestowane na sprzęcie:** mikrofon/głośnik, Piper, Windows, klucz FIDO2.
+Backup: `scripts/backup-usb.sh` → dysk SAMSUNG (podłącz i wykonaj przed przerwą).

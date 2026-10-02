@@ -315,9 +315,7 @@ def test_build_contact_card_bidirectional_and_open_items():
     assert any("Anna Nowak → Ty" in ex for ex in exchanges)
 
     # Otwarte sprawy rozróżniają: co czeka na Ciebie vs na kontakt
-    assert any(
-        "Czeka na Ciebie" in item and "Pytanie o termin" in item for item in card.open_items
-    )
+    assert any("Czeka na Ciebie" in item and "Pytanie o termin" in item for item in card.open_items)
     assert any(
         "Czeka na kontakt" in item and "Oferta współpracy" in item for item in card.open_items
     )

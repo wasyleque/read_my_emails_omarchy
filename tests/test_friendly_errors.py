@@ -48,3 +48,33 @@ def test_timeout_error():
     msg_pl = format_friendly_error(exc, lang="pl")
     assert "Nie można połączyć się z serwerem" in msg_pl
     assert "połączenie z internetem" in msg_pl
+
+
+def test_unknown_error_shows_friendly_message_without_raw_trace():
+    exc = AttributeError("'ImapToolsClient' object has no attribute 'login'")
+    msg_pl = format_friendly_error(exc, lang="pl")
+    assert "Coś poszło nie tak" in msg_pl
+    assert "kliknij Szczegóły" in msg_pl
+    assert "AttributeError" not in msg_pl
+    assert "ImapToolsClient" not in msg_pl
+
+    msg_en = format_friendly_error(exc, lang="en")
+    assert "Something went wrong" in msg_en
+    assert "click Details" in msg_en
+    assert "AttributeError" not in msg_en
+
+
+def test_sanitize_error_details_masks_passwords_and_tokens():
+    from mailvoice.core.friendly_errors import format_friendly_error_ex, sanitize_error_details
+
+    exc = ValueError("Failed connection with password=SuperSecretPass123 and token=XYZ98765")
+    details = sanitize_error_details(exc)
+    assert "Typ błędu: ValueError" in details
+    assert "SuperSecretPass123" not in details
+    assert "XYZ98765" not in details
+    assert "[UKRYTE_HASŁO]" in details
+
+    # Sprawdzenie format_friendly_error_ex
+    friendly, details_ex = format_friendly_error_ex(exc, lang="pl")
+    assert "Coś poszło nie tak" in friendly
+    assert details_ex == details

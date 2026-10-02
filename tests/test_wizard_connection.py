@@ -34,9 +34,11 @@ def _fake_client(monkeypatch):
 
 def _run(lang="pl"):
     worker = wizard_mod.ImapTestWorker("h", 993, "u", "p", True, lang)
-    results = {"ok": 0, "err": []}
+    results = {"ok": 0, "err": [], "details": []}
     worker.finished_ok.connect(lambda: results.__setitem__("ok", results["ok"] + 1))
-    worker.finished_error.connect(results["err"].append)
+    worker.finished_error.connect(
+        lambda msg, det: (results["err"].append(msg), results["details"].append(det))
+    )
     worker.run()  # synchronicznie, bez uruchamiania wątku
     return results
 
@@ -52,6 +54,7 @@ def test_failed_login_emits_friendly_message_and_closes_client():
     results = _run()
     assert results["ok"] == 0 and len(results["err"]) == 1
     assert "Hasło lub login nie pasują" in results["err"][0]
+    assert "Typ błędu: FetchError" in results["details"][0]
     assert _FakeClient.instances[0].closed
 
 

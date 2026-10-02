@@ -372,9 +372,7 @@ def build_contact_card(
             dt = r.date[:10] if r.date else ""
             r_dir = getattr(r, "direction", "in")
             k_lbl = (
-                f"Ty → {contact.display_name}"
-                if r_dir == "out"
-                else f"{contact.display_name} → Ty"
+                f"Ty → {contact.display_name}" if r_dir == "out" else f"{contact.display_name} → Ty"
             )
             text_desc = r.summary or r.why or ""
             history_lines.append(f"- [{dt}] {k_lbl}: {r.subject} ({text_desc})")
