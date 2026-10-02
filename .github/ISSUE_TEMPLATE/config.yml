@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Zgłoszenie luki bezpieczeństwa / Security vulnerability"
+    url: "https://github.com/wasyleque/read_my_emails_omarchy/security/advisories/new"
+    about: "Zgłoś prywatnie / Report privately"
