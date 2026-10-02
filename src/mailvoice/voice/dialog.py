@@ -184,6 +184,8 @@ class VoiceDialog:
         self.speaker = speaker
         self.listener = listener
         self.service = service
+        self.on_problem: Callable[[str], None] | None = None
+        self.last_problem: str | None = None
         self.beeper = beeper or FakeBeeper()
         self.confirm_presence = confirm_presence or (lambda: True)
         self.summarizer_fn = summarizer_fn or self._default_summarize
@@ -225,8 +227,25 @@ class VoiceDialog:
             )
             self._speak_safely(retry_prompt, lang)
             return self.listener.listen(timeout_s=5.0)
-        except VoiceUnavailable:
+        except VoiceUnavailable as exc:
+            self._report_problem(str(exc))
             return None
+
+    def _listen(self) -> str | None:
+        """Nasłuch z zgłaszaniem problemów mikrofonu do interfejsu (zamiast ciszy)."""
+        try:
+            return self.listener.listen(timeout_s=8.0)
+        except VoiceUnavailable as exc:
+            self._report_problem(str(exc))
+            return None
+
+    def _report_problem(self, message: str) -> None:
+        """Przekazuje problem z głosem do interfejsu (raz na ten sam komunikat)."""
+        if message == self.last_problem:
+            return
+        self.last_problem = message
+        if self.on_problem:
+            self.on_problem(message)
 
     def handle_event(self, event: Event) -> None:
         """Główny punkt wejścia zdarzeń z MailService do dialogu głosowego."""
@@ -424,7 +443,7 @@ class VoiceDialog:
             if idx + 1 < total:
                 continue_prompt = "Czytać dalej?" if mail_lang == "pl" else "Continue?"
                 self._speak_safely(continue_prompt, mail_lang)
-                cmd_text = self.listener.listen(timeout_s=5.0)
+                cmd_text = self._listen()
                 cmd = classify_command(cmd_text)
 
                 if cmd == VoiceCommand.REPEAT:
@@ -526,7 +545,7 @@ class VoiceDialog:
             if idx + 1 < total:
                 continue_prompt = "Czytać dalej?" if lang == "pl" else "Continue?"
                 self._speak_safely(continue_prompt, lang)
-                cmd_text = self.listener.listen(timeout_s=5.0)
+                cmd_text = self._listen()
                 cmd = classify_command(cmd_text)
 
                 if cmd == VoiceCommand.REPEAT:
@@ -574,7 +593,7 @@ class VoiceDialog:
                 )
             )
             self._speak_safely(prompt, lang)
-            ans = self.listener.listen(timeout_s=5.0)
+            ans = self._listen()
             cmd = classify_command(ans)
             if cmd == VoiceCommand.YES:
                 hits = self.service.ai_search(query)
@@ -641,7 +660,7 @@ class VoiceDialog:
             if idx + 1 < total:
                 continue_prompt = "Czytać kolejny wynik?" if lang == "pl" else "Read next result?"
                 self._speak_safely(continue_prompt, lang)
-                cmd_text = self.listener.listen(timeout_s=5.0)
+                cmd_text = self._listen()
                 cmd = classify_command(cmd_text)
 
                 if cmd == VoiceCommand.REPEAT:

@@ -37,10 +37,25 @@ class FakeListener:
 class WhisperListener:
     """Implementacja rozpoznawania mowy oparta na bibliotece faster-whisper z VAD."""
 
-    def __init__(self, model_size: str = "small", language: str | None = None) -> None:
+    def __init__(
+        self, model_size: str = "small", language: str | None = None, cue: bool = True
+    ) -> None:
         self.model_size = model_size
         self.language = language
+        self.cue = cue
         self._model = None
+
+    def preload(self) -> None:
+        """Ładuje model w tle (start aplikacji), by pierwsze nasłuchiwanie nie czekało."""
+        import threading
+
+        def _load() -> None:
+            try:
+                self._get_model()
+            except VoiceUnavailable:
+                pass  # błąd zgłosi pierwsze prawdziwe nasłuchiwanie
+
+        threading.Thread(target=_load, name="whisper-preload", daemon=True).start()
 
     def _get_model(self):
         if self._model is not None:
@@ -48,7 +63,7 @@ class WhisperListener:
         try:
             from faster_whisper import WhisperModel
 
-            self._model = WhisperModel(self.model_size, device="auto", compute_type="default")
+            self._model = WhisperModel(self.model_size, device="auto", compute_type="int8")
             return self._model
         except ImportError as exc:
             raise VoiceUnavailable(
@@ -59,32 +74,93 @@ class WhisperListener:
             raise VoiceUnavailable(f"Błąd ładowania modelu Whisper: {exc}") from exc
 
     def listen(self, timeout_s: float = 5.0) -> str | None:
-        """Nagrywa dźwięk z mikrofonu do momentu ciszy i transkrybuje model Whisper."""
+        """Sygnał „mów”, nagrywa do ciszy po wypowiedzi (max timeout_s), transkrybuje Whisperem."""
         try:
-            import numpy as np  # noqa: F401
-            import sounddevice as sd  # noqa: F401
+            import numpy as np
+            import sounddevice as sd
         except ImportError as exc:
             raise VoiceUnavailable(
                 "Biblioteki audio (sounddevice, numpy) nie są zainstalowane.\n"
-                "Zainstaluj zależności poleceniem: pip install 'mailvoice[voice]'."
+                "Zainstaluj zależności poleceniem: pip install -e '.[voice]'."
             ) from exc
 
         model = self._get_model()
-        # W środowisku bez podłączonego fizycznego mikrofonu zwracamy None lub transkrypcję
         try:
-            sample_rate = 16000
-            duration = min(timeout_s, 5.0)
-            audio = sd.rec(
-                int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="float32"
-            )
-            sd.wait()
-            audio_flat = audio.flatten()
-            if np.max(np.abs(audio_flat)) < 0.01:
-                # Cisza
-                return None
-
-            segments, _ = model.transcribe(audio_flat, language=self.language, vad_filter=True)
+            if self.cue:
+                _play_cue(sd, np)
+            audio = _record_until_silence(sd, np, max_seconds=max(1.0, min(timeout_s, 12.0)))
+        except VoiceUnavailable:
+            raise
+        except Exception as exc:
+            raise VoiceUnavailable(f"Błąd nagrywania z mikrofonu: {exc}") from exc
+        if audio is None:
+            return None  # nikt nie mówił
+        try:
+            segments, _ = model.transcribe(audio, language=self.language, vad_filter=True)
             text_parts = [segment.text.strip() for segment in segments]
             return " ".join(text_parts).strip() or None
         except Exception as exc:
-            raise VoiceUnavailable(f"Błąd nagrywania lub transkrypcji Whisper: {exc}") from exc
+            raise VoiceUnavailable(f"Błąd transkrypcji Whisper: {exc}") from exc
+
+
+SAMPLE_RATE = 16000
+CHUNK_S = 0.1
+DEAD_MIC_PEAK = 1e-4
+
+
+class EndpointDetector:
+    """Wykrywa początek i koniec wypowiedzi po energii (RMS) kolejnych krótkich fragmentów."""
+
+    def __init__(self, silence_s: float = 0.9, min_threshold: float = 0.02, calib_chunks: int = 3):
+        self.silence_chunks = max(1, round(silence_s / CHUNK_S))
+        self.min_threshold = min_threshold
+        self.calib_chunks = calib_chunks
+        self._calib: list[float] = []
+        self.threshold: float | None = None
+        self.started = False
+        self._quiet = 0
+
+    def feed(self, rms: float) -> bool:
+        """True, gdy wypowiedź się skończyła (była mowa, potem wystarczająco długa cisza)."""
+        if self.threshold is None:
+            self._calib.append(rms)
+            if len(self._calib) >= self.calib_chunks:
+                noise = sorted(self._calib)[len(self._calib) // 2]
+                self.threshold = max(noise * 3.0, self.min_threshold)
+            return False
+        if rms >= self.threshold:
+            self.started = True
+            self._quiet = 0
+            return False
+        if self.started:
+            self._quiet += 1
+            return self._quiet >= self.silence_chunks
+        return False
+
+
+def _play_cue(sd, np) -> None:
+    """Krótki sygnał „teraz mów” (cichy, żeby nie zagłuszać mikrofonu)."""
+    t = np.linspace(0, 0.12, int(0.12 * 22050), endpoint=False)
+    sd.play((0.2 * np.sin(2 * np.pi * 880 * t)).astype("float32"), samplerate=22050)
+    sd.wait()
+
+
+def _record_until_silence(sd, np, max_seconds: float):
+    """Nagrywa do ciszy po wypowiedzi. None = nikt nie mówił; martwy mikrofon = VoiceUnavailable."""
+    detector = EndpointDetector()
+    frames = []
+    chunk = int(SAMPLE_RATE * CHUNK_S)
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32") as stream:
+        for _ in range(int(max_seconds / CHUNK_S)):
+            data, _overflow = stream.read(chunk)
+            x = data.flatten()
+            frames.append(x)
+            if detector.feed(float(np.sqrt(np.mean(x**2)))):
+                break
+    audio = np.concatenate(frames)
+    if float(np.max(np.abs(audio))) < DEAD_MIC_PEAK:
+        raise VoiceUnavailable(
+            "Mikrofon nie przekazuje dźwięku. Sprawdź, czy wejście nie jest wyciszone ani "
+            "ustawione na 0% (np. polecenie: wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 0.5)."
+        )
+    return audio if detector.started else None

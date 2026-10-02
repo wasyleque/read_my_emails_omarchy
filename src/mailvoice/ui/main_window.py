@@ -428,6 +428,10 @@ class MainWindow(QMainWindow):
         self._last_error_details = str(raw_message)
         self.btn_error_details.setVisible(True)
 
+    def show_voice_problem(self, message: str) -> None:
+        """Problem z głosem/mikrofonem pokazany w oknie (zamiast cichego ignorowania)."""
+        self._show_problem(message)
+
     def _show_error_details(self) -> None:
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Information)

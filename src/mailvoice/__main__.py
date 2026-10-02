@@ -94,6 +94,7 @@ def _run() -> int:
 
     speaker = PiperSpeaker()
     listener = WhisperListener()
+    listener.preload()  # model Whisper ładuje się w tle, nie przy pierwszym pytaniu
     beeper = SounddeviceBeeper()
     dialog = VoiceDialog(speaker=speaker, listener=listener, service=service)
 
@@ -105,6 +106,7 @@ def _run() -> int:
         beeper=beeper,
         voice_dialog=dialog,
     )
+    dialog.on_problem = window.show_voice_problem
     window.show()
 
     return app.exec()
