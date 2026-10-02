@@ -85,6 +85,19 @@
     <string name="status_ignoring">Saving ignore rule...</string>
     <string name="msg_mail_ignored">Ignored</string>
 
+    <!-- VIP marking -->
+    <string name="btn_vip">VIP…</string>
+    <string name="badge_vip">★ VIP</string>
+    <string name="vip_dialog_title">Mark as VIP</string>
+    <string name="vip_dialog_question">Which emails should always be important (always notify)?</string>
+    <string name="vip_dialog_hint">The computer will remember this rule and you can remove it in program settings (Settings → People (VIP)).</string>
+    <string name="vip_mode_similar">Similar emails from this sender (same subject)</string>
+    <string name="vip_mode_sender">All emails from this sender</string>
+    <string name="vip_mode_domain">All emails from this domain (entire organization)</string>
+    <string name="btn_confirm_vip">Mark as VIP</string>
+    <string name="status_marking_vip">Marking as VIP…</string>
+    <string name="msg_mail_marked_vip">Marked as VIP</string>
+
     <!-- Screen states and errors -->
     <string name="status_loading_mails">Loading important emails…</string>
     <string name="status_preparing_digest">Preparing summary…</string>

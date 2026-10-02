@@ -85,6 +85,19 @@
     <string name="status_ignoring">Zapisywanie reguły ignorowania...</string>
     <string name="msg_mail_ignored">Zignorowano</string>
 
+    <!-- Oznaczanie VIP -->
+    <string name="btn_vip">VIP…</string>
+    <string name="badge_vip">★ VIP</string>
+    <string name="vip_dialog_title">Oznacz jako VIP</string>
+    <string name="vip_dialog_question">Które maile mają być zawsze ważne (zawsze powiadamiać)?</string>
+    <string name="vip_dialog_hint">Komputer zapamięta regułę i można ją usunąć w ustawieniach programu (Ustawienia → Ludzie (VIP)).</string>
+    <string name="vip_mode_similar">Podobne maile od tego nadawcy (ten sam temat)</string>
+    <string name="vip_mode_sender">Wszystkie maile od tego nadawcy</string>
+    <string name="vip_mode_domain">Wszystkie maile z tej domeny (całej firmy)</string>
+    <string name="btn_confirm_vip">Oznacz jako VIP</string>
+    <string name="status_marking_vip">Oznaczanie jako VIP…</string>
+    <string name="msg_mail_marked_vip">Oznaczono jako VIP</string>
+
     <!-- Stany ekranów i błędy -->
     <string name="status_loading_mails">Ładowanie ważnych wiadomości…</string>
     <string name="status_preparing_digest">Przygotowuję podsumowanie…</string>

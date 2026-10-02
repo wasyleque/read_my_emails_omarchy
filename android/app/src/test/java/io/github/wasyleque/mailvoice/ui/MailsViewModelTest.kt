@@ -476,4 +476,94 @@ class MailsViewModelTest {
         viewModel.dismissRefreshError()
         assertNull((viewModel.uiState.value as MailsUiState.Content).refreshError)
     }
+
+    // ---------- VIP (lustro „Ignoruj”) ----------
+
+    private fun vipMail(id: String = "m1", suspicious: Boolean = false) = ImportantMail(
+        id = id, sender = "Jan", subject = "Temat", importance = 5, why = "P", summary = "S",
+        suspicious = suspicious, date = "d", acknowledged = false
+    )
+
+    @Test
+    fun testVipDialogOpensAndDismisses() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        assertNull(viewModel.vipDialogTarget.value)
+        viewModel.openVipDialog(vipMail())
+        assertEquals("m1", viewModel.vipDialogTarget.value?.id)
+        viewModel.dismissVipDialog()
+        assertNull(viewModel.vipDialogTarget.value)
+    }
+
+    @Test
+    fun testVipDialogNeverOpensForSuspiciousMail() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        viewModel.openVipDialog(vipMail(suspicious = true))
+        assertNull("podrobiony nadawca nie może zostać VIP-em jednym kliknięciem", viewModel.vipDialogTarget.value)
+
+        // także bezpośrednie potwierdzenie bez dialogu nic nie wysyła
+        viewModel.confirmVip(IgnoreMode.SENDER)
+        advanceUntilIdle()
+        assertEquals(1, server.requestCount) // tylko początkowe pobranie listy
+    }
+
+    @Test
+    fun testConfirmVipSuccessSendsRequestAndRefreshesList() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+        server.takeRequest()
+
+        viewModel.openVipDialog(vipMail())
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"status":"ok","mode":"similar","rule":"Jan"}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+
+        viewModel.confirmVip(IgnoreMode.SIMILAR)
+        advanceUntilIdle()
+
+        val vipReq = server.takeRequest()
+        assertEquals("/v1/mails/m1/vip", vipReq.path)
+        assertEquals("POST", vipReq.method)
+        assertTrue(vipReq.body.readUtf8().contains("\"mode\":\"similar\""))
+        assertEquals("/v1/mails/important?limit=30", server.takeRequest().path) // odświeżenie listy
+
+        assertFalse(viewModel.isMarkingVip.value)
+        assertNull(viewModel.vipDialogTarget.value)
+        assertEquals("Oznaczono jako VIP", viewModel.userMessage.value)
+    }
+
+    @Test
+    fun testConfirmVipErrorKeepsDialogForRetry() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        viewModel.openVipDialog(vipMail())
+        server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":"Ta funkcja jest niedostępna."}"""))
+        viewModel.confirmVip(IgnoreMode.DOMAIN)
+        advanceUntilIdle()
+
+        assertEquals("dialog zostaje, żeby można było ponowić", "m1", viewModel.vipDialogTarget.value?.id)
+        assertFalse(viewModel.isMarkingVip.value)
+        assertTrue(viewModel.vipErrorMessage.value?.contains("niedostępna") == true)
+    }
+
+    @Test
+    fun testConfirmVipUnauthorizedMarksUnauthorized() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        viewModel.openVipDialog(vipMail())
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"Brak autoryzacji"}"""))
+        viewModel.confirmVip(IgnoreMode.SIMILAR)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.isUnauthorized.value)
+    }
 }

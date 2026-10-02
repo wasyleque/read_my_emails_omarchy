@@ -41,6 +41,7 @@ fun MailDetailScreen(
     onBack: () -> Unit,
     onListenClicked: (ImportantMail) -> Unit,
     onAckClicked: (String) -> Unit,
+    onVipClicked: (ImportantMail) -> Unit = {},
     onIgnoreClicked: (ImportantMail) -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -264,16 +265,33 @@ fun MailDetailScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            OutlinedButton(
-                onClick = { onIgnoreClicked(mail) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.btn_ignore),
-                    style = MaterialTheme.typography.titleMedium
-                )
+                OutlinedButton(
+                    onClick = { onVipClicked(mail) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.btn_vip),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { onIgnoreClicked(mail) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.btn_ignore),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }

@@ -49,6 +49,7 @@ fun MailsListScreen(
     onRefresh: () -> Unit,
     onMailClicked: (ImportantMail) -> Unit,
     onStartVoiceSession: () -> Unit,
+    onVipClicked: (ImportantMail) -> Unit = {},
     onIgnoreClicked: (ImportantMail) -> Unit,
     onDismissRefreshError: () -> Unit = {}
 ) {
@@ -255,6 +256,7 @@ fun MailsListScreen(
                         MailItemCard(
                             mail = mail,
                             onClick = { onMailClicked(mail) },
+                            onVipClicked = { onVipClicked(mail) },
                             onIgnoreClicked = { onIgnoreClicked(mail) }
                         )
                     }
@@ -268,6 +270,7 @@ fun MailsListScreen(
 private fun MailItemCard(
     mail: ImportantMail,
     onClick: () -> Unit,
+    onVipClicked: () -> Unit,
     onIgnoreClicked: () -> Unit
 ) {
     Card(
@@ -368,12 +371,25 @@ private fun MailItemCard(
                 )
             }
 
-            // Wiersz 5: Akcja ignorowania
+            // Wiersz 5: Akcje (VIP / Ignoruj)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (!mail.suspicious) {
+                    OutlinedButton(
+                        onClick = onVipClicked,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.btn_vip),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 OutlinedButton(
                     onClick = onIgnoreClicked,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),

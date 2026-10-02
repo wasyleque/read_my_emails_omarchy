@@ -44,6 +44,11 @@ data class IgnoreResult(
 )
 
 /**
+ * Wynik oznaczenia wiadomości jako VIP z POST /v1/mails/{id}/vip.
+ */
+typealias VipResult = IgnoreResult
+
+/**
  * Dostępne tryby ignorowania wiadomości.
  */
 enum class IgnoreMode(val apiValue: String) {
@@ -70,7 +75,8 @@ data class DigestTopic(
     val importance: Int,
     val mailCount: Int,
     val lastActivity: String,
-    val whoToWhom: List<String>
+    val whoToWhom: List<String>,
+    val vip: Boolean = false
 )
 
 /**

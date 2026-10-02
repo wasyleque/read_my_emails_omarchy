@@ -118,6 +118,30 @@ class MailApi(
     }
 
     /**
+     * Oznacza wiadomość i dodaje regułę VIP na komputerze (POST /v1/mails/{id}/vip).
+     * @param mailId identyfikator wiadomości (24 znaki hex HMAC)
+     * @param mode tryb reguły VIP ("similar" | "sender" | "domain")
+     */
+    suspend fun vipMail(mailId: String, mode: String = "similar"): ApiResult<VipResult> {
+        val jsonPayload = JSONObject().apply {
+            put("mode", mode)
+        }.toString()
+        val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        return executeRequest(
+            endpoint = "/v1/mails/$mailId/vip",
+            builder = Request.Builder().post(body)
+        ) { bodyString ->
+            val json = JSONObject(bodyString)
+            VipResult(
+                status = json.optString("status", "ok"),
+                mode = json.optString("mode", mode),
+                rule = json.optString("rule", "")
+            )
+        }
+    }
+
+    /**
      * Pobiera podsumowanie tematów (GET /v1/digest?days=...&limit=...[&all=1]).
      * Używa dedykowanego limitu czasu odczytu 30 sekund.
      */
@@ -160,7 +184,8 @@ class MailApi(
                         importance = item.optInt("importance", 0),
                         mailCount = item.optInt("mail_count", 1),
                         lastActivity = item.optString("last_activity"),
-                        whoToWhom = whoList
+                        whoToWhom = whoList,
+                        vip = item.optBoolean("vip", false)
                     )
                 )
             }
@@ -321,7 +346,7 @@ class MailApi(
                     503 -> {
                         val errorDetail = parseErrorMessage(response.body?.string())
                         ApiResult.Error(
-                            message = errorDetail ?: "Funkcja ignorowania jest obecnie niedostępna na komputerze (kod 503).",
+                            message = errorDetail ?: "Ta funkcja jest obecnie niedostępna na komputerze (kod 503).",
                             httpCode = 503
                         )
                     }

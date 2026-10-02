@@ -495,4 +495,84 @@ class MailApiTest {
         val error = result as ApiResult.Error
         assertTrue(error.message.contains("Błąd przetwarzania odpowiedzi serwera"))
     }
+
+    // ---------- VIP (lustro „Ignoruj”) ----------
+
+    @Test
+    fun testVipMailSuccess() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"status":"ok","mode":"similar","rule":"od: faktury@dostawca.pl, temat zawiera: faktura"}""")
+        )
+
+        val result = api.vipMail("m123", mode = "similar")
+
+        assertTrue(result is ApiResult.Success)
+        val data = (result as ApiResult.Success).data
+        assertEquals("ok", data.status)
+        assertEquals("similar", data.mode)
+        assertEquals("od: faktury@dostawca.pl, temat zawiera: faktura", data.rule)
+
+        val request = server.takeRequest()
+        assertEquals("/v1/mails/m123/vip", request.path)
+        assertEquals("POST", request.method)
+        assertEquals("Bearer test_bearer_token", request.getHeader("Authorization"))
+        assertTrue(request.body.readUtf8().contains("\"mode\":\"similar\""))
+    }
+
+    @Test
+    fun testVipMailErrors() = runTest(testDispatcher) {
+        val api = createApi()
+        for ((code, body, fragment) in listOf(
+            Triple(400, """{"error":"Nieznany tryb."}""", "Nieznany tryb"),
+            Triple(404, """{"error":"Wiadomość nie znaleziona."}""", "Wiadomość nie znaleziona"),
+            Triple(503, """{"error":"Ta funkcja jest niedostępna."}""", "niedostępna"),
+        )) {
+            server.enqueue(MockResponse().setResponseCode(code).setBody(body))
+            val result = api.vipMail("m123", mode = "sender")
+            assertTrue("kod $code", result is ApiResult.Error)
+            val error = result as ApiResult.Error
+            assertEquals(code, error.httpCode)
+            assertTrue("kod $code: ${error.message}", error.message.contains(fragment))
+            server.takeRequest()
+        }
+    }
+
+    @Test
+    fun testVipMail401Unauthorized() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"Brak autoryzacji"}"""))
+
+        val result = api.vipMail("m123", mode = "domain")
+
+        assertTrue(result is ApiResult.Error)
+        assertTrue((result as ApiResult.Error).isUnauthorized)
+        assertFalse("TokenStore musi zostać wyczyszczony przy 401", tokenStore.isPaired())
+    }
+
+    @Test
+    fun testDigestParsesOptionalVipFlag() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {"period":"ostatnie 30 dni","topics":[
+                  {"title":"Sprawa VIP","status":"oczekuje_na_mnie","why":"p","importance":9,"mail_count":2,
+                   "last_activity":"2026-10-02T10:00:00","who_to_whom":["a -> b"],"vip":true},
+                  {"title":"Zwykła","status":"oczekuje_na_mnie","why":"p","importance":5,"mail_count":1,
+                   "last_activity":"2026-10-02T09:00:00","who_to_whom":[]}
+                ]}
+                """.trimIndent()
+            )
+        )
+
+        val result = api.getDigest(days = 30)
+
+        assertTrue(result is ApiResult.Success)
+        val topics = (result as ApiResult.Success).data.topics
+        assertTrue(topics[0].vip)
+        assertFalse("stary serwer nie wysyła pola vip", topics[1].vip)
+    }
 }

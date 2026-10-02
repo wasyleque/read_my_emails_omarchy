@@ -68,6 +68,16 @@ class MailsViewModel(
     private val _ignoreErrorMessage = MutableStateFlow<String?>(null)
     val ignoreErrorMessage: StateFlow<String?> = _ignoreErrorMessage.asStateFlow()
 
+    // Stan dialogu oznaczania VIP
+    private val _vipDialogTarget = MutableStateFlow<ImportantMail?>(null)
+    val vipDialogTarget: StateFlow<ImportantMail?> = _vipDialogTarget.asStateFlow()
+
+    private val _isMarkingVip = MutableStateFlow(false)
+    val isMarkingVip: StateFlow<Boolean> = _isMarkingVip.asStateFlow()
+
+    private val _vipErrorMessage = MutableStateFlow<String?>(null)
+    val vipErrorMessage: StateFlow<String?> = _vipErrorMessage.asStateFlow()
+
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
@@ -184,6 +194,46 @@ class MailsViewModel(
                 is ApiResult.Error -> {
                     _isIgnoring.value = false
                     _ignoreErrorMessage.value = result.message
+                    if (result.isUnauthorized) {
+                        _isUnauthorized.value = true
+                    }
+                }
+            }
+        }
+    }
+
+    fun openVipDialog(mail: ImportantMail) {
+        // Dla maili oznaczonych jako podejrzane NIE otwieraj dialogu VIP
+        if (mail.suspicious) return
+        _vipErrorMessage.value = null
+        _vipDialogTarget.value = mail
+    }
+
+    fun dismissVipDialog() {
+        if (!_isMarkingVip.value) {
+            _vipDialogTarget.value = null
+            _vipErrorMessage.value = null
+        }
+    }
+
+    fun confirmVip(mode: IgnoreMode) {
+        val targetMail = _vipDialogTarget.value ?: return
+        if (targetMail.suspicious) return
+        _isMarkingVip.value = true
+        _vipErrorMessage.value = null
+
+        viewModelScope.launch {
+            when (val result = mailApi.vipMail(targetMail.id, mode.apiValue)) {
+                is ApiResult.Success -> {
+                    _isMarkingVip.value = false
+                    _vipDialogTarget.value = null
+                    _userMessage.value = "Oznaczono jako VIP"
+                    // Odśwież listę z serwera
+                    loadMails()
+                }
+                is ApiResult.Error -> {
+                    _isMarkingVip.value = false
+                    _vipErrorMessage.value = result.message
                     if (result.isUnauthorized) {
                         _isUnauthorized.value = true
                     }

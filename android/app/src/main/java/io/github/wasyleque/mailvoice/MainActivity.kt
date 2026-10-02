@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +34,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -57,6 +60,7 @@ import io.github.wasyleque.mailvoice.ui.PairingScreen
 import io.github.wasyleque.mailvoice.ui.QrScannerScreen
 import io.github.wasyleque.mailvoice.ui.SettingsScreen
 import io.github.wasyleque.mailvoice.ui.SettingsViewModel
+import io.github.wasyleque.mailvoice.ui.VipMailDialog
 import io.github.wasyleque.mailvoice.ui.VoiceSessionDialog
 import io.github.wasyleque.mailvoice.voice.AndroidSpeechHelper
 import io.github.wasyleque.mailvoice.voice.AndroidTtsHelper
@@ -290,25 +294,37 @@ fun PairedAppMain(
     val ignoreTarget by mailsViewModel.ignoreDialogTarget.collectAsState()
     val isIgnoring by mailsViewModel.isIgnoring.collectAsState()
     val ignoreError by mailsViewModel.ignoreErrorMessage.collectAsState()
+    val vipTarget by mailsViewModel.vipDialogTarget.collectAsState()
+    val isMarkingVip by mailsViewModel.isMarkingVip.collectAsState()
+    val vipError by mailsViewModel.vipErrorMessage.collectAsState()
     val userMessage by mailsViewModel.userMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(userMessage) {
         userMessage?.let { msg ->
-            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            snackbarHostState.showSnackbar(msg)
             mailsViewModel.clearUserMessage()
         }
     }
 
     if (selectedMail != null) {
-        MailDetailScreen(
-            mail = selectedMail!!,
-            onBack = { mailsViewModel.clearSelectedMail() },
-            onListenClicked = { mail -> mailsViewModel.startVoiceSession(listOf(mail)) },
-            onAckClicked = { mailId -> mailsViewModel.ackMail(mailId) },
-            onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) }
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            MailDetailScreen(
+                mail = selectedMail!!,
+                onBack = { mailsViewModel.clearSelectedMail() },
+                onListenClicked = { mail -> mailsViewModel.startVoiceSession(listOf(mail)) },
+                onAckClicked = { mailId -> mailsViewModel.ackMail(mailId) },
+                onVipClicked = { mail -> mailsViewModel.openVipDialog(mail) },
+                onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) }
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     } else {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(

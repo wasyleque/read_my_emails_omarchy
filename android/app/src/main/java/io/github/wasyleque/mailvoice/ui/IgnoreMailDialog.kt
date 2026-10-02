@@ -34,8 +34,14 @@ import io.github.wasyleque.mailvoice.R
 import io.github.wasyleque.mailvoice.net.IgnoreMode
 import io.github.wasyleque.mailvoice.net.ImportantMail
 
+enum class RuleDialogKind {
+    IGNORE,
+    VIP
+}
+
 @Composable
-fun IgnoreMailDialog(
+fun MailRuleDialog(
+    kind: RuleDialogKind,
     mail: ImportantMail,
     isSubmitting: Boolean,
     errorMessage: String?,
@@ -51,7 +57,9 @@ fun IgnoreMailDialog(
         shape = RoundedCornerShape(20.dp),
         title = {
             Text(
-                text = stringResource(R.string.ignore_dialog_title),
+                text = stringResource(
+                    if (kind == RuleDialogKind.VIP) R.string.vip_dialog_title else R.string.ignore_dialog_title
+                ),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -71,34 +79,50 @@ fun IgnoreMailDialog(
                 )
 
                 Text(
-                    text = stringResource(R.string.ignore_dialog_desc),
+                    text = stringResource(
+                        if (kind == RuleDialogKind.VIP) R.string.vip_dialog_question else R.string.ignore_dialog_desc
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 // Opcja 1: Podobne maile (domyślna)
-                IgnoreOptionRow(
-                    text = stringResource(R.string.ignore_mode_similar),
+                RuleOptionRow(
+                    text = stringResource(
+                        if (kind == RuleDialogKind.VIP) R.string.vip_mode_similar else R.string.ignore_mode_similar
+                    ),
                     selected = selectedMode == IgnoreMode.SIMILAR,
                     enabled = !isSubmitting,
                     onSelect = { selectedMode = IgnoreMode.SIMILAR }
                 )
 
                 // Opcja 2: Wszystkie od tego nadawcy
-                IgnoreOptionRow(
-                    text = stringResource(R.string.ignore_mode_sender),
+                RuleOptionRow(
+                    text = stringResource(
+                        if (kind == RuleDialogKind.VIP) R.string.vip_mode_sender else R.string.ignore_mode_sender
+                    ),
                     selected = selectedMode == IgnoreMode.SENDER,
                     enabled = !isSubmitting,
                     onSelect = { selectedMode = IgnoreMode.SENDER }
                 )
 
                 // Opcja 3: Cała domena firmy
-                IgnoreOptionRow(
-                    text = stringResource(R.string.ignore_mode_domain),
+                RuleOptionRow(
+                    text = stringResource(
+                        if (kind == RuleDialogKind.VIP) R.string.vip_mode_domain else R.string.ignore_mode_domain
+                    ),
                     selected = selectedMode == IgnoreMode.DOMAIN,
                     enabled = !isSubmitting,
                     onSelect = { selectedMode = IgnoreMode.DOMAIN }
                 )
+
+                if (kind == RuleDialogKind.VIP) {
+                    Text(
+                        text = stringResource(R.string.vip_dialog_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -116,19 +140,35 @@ fun IgnoreMailDialog(
                 onClick = { onConfirm(selectedMode) },
                 enabled = !isSubmitting,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
+                    containerColor = if (kind == RuleDialogKind.VIP) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onError,
+                        color = if (kind == RuleDialogKind.VIP) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onError
+                        },
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.status_ignoring))
+                    Text(
+                        stringResource(
+                            if (kind == RuleDialogKind.VIP) R.string.status_marking_vip else R.string.status_ignoring
+                        )
+                    )
                 } else {
-                    Text(stringResource(R.string.btn_confirm_ignore))
+                    Text(
+                        stringResource(
+                            if (kind == RuleDialogKind.VIP) R.string.btn_confirm_vip else R.string.btn_confirm_ignore
+                        )
+                    )
                 }
             }
         },
@@ -144,7 +184,43 @@ fun IgnoreMailDialog(
 }
 
 @Composable
-private fun IgnoreOptionRow(
+fun IgnoreMailDialog(
+    mail: ImportantMail,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (mode: IgnoreMode) -> Unit
+) {
+    MailRuleDialog(
+        kind = RuleDialogKind.IGNORE,
+        mail = mail,
+        isSubmitting = isSubmitting,
+        errorMessage = errorMessage,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
+    )
+}
+
+@Composable
+fun VipMailDialog(
+    mail: ImportantMail,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (mode: IgnoreMode) -> Unit
+) {
+    MailRuleDialog(
+        kind = RuleDialogKind.VIP,
+        mail = mail,
+        isSubmitting = isSubmitting,
+        errorMessage = errorMessage,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
+    )
+}
+
+@Composable
+private fun RuleOptionRow(
     text: String,
     selected: Boolean,
     enabled: Boolean,
