@@ -62,3 +62,45 @@ def test_has_last_uid_distinguishes_zero_baseline_from_missing():
     store.set_last_uid("a", "INBOX", 1, 0)
     assert store.has_last_uid("a", "INBOX", 1)
     assert not store.has_last_uid("a", "INBOX", 2)
+
+
+def test_store_usable_from_another_thread_file_db(tmp_path):
+    """Regresja: „SQLite objects created in a thread can only be used in that same thread”."""
+    import threading
+
+    store = Store(tmp_path / "t.db")  # utworzony w wątku głównym
+    errors: list[Exception] = []
+
+    def worker():  # jak CycleWorker (QThread)
+        try:
+            store.mark_seen("a", "INBOX", 1, 5, "<m@x>")
+            store.set_last_uid("a", "INBOX", 1, 5)
+            assert store.is_seen("a", "INBOX", 1, 5, "<m@x>")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+    assert errors == []
+    assert store.is_seen("a", "INBOX", 1, 5, "<m@x>")  # widoczne w wątku głównym
+    assert store.get_last_uid("a", "INBOX", 1) == 5
+    store.close()
+
+
+def test_store_memory_usable_from_another_thread():
+    import threading
+
+    store = Store()
+    errors: list[Exception] = []
+
+    def worker():
+        try:
+            store.mark_seen("a", "INBOX", 1, 1, None)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+    assert errors == [] and store.is_seen("a", "INBOX", 1, 1, None)

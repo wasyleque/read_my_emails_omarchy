@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -54,8 +55,34 @@ class Store:
     def __init__(self, path: str | Path = ":memory:"):
         self.path = Path(path)
         self.has_fts = False
-        self.connection = sqlite3.connect(self.path)
+        self._memory = str(path) == ":memory:"
+        self._local = threading.local()
+        self._open_connections: list[sqlite3.Connection] = []
+        self._conns_lock = threading.Lock()
+        self._shared: sqlite3.Connection | None = None
+        if self._memory:
+            # baza w pamięci (testy): jedno połączenie współdzielone między wątkami
+            self._shared = sqlite3.connect(":memory:", check_same_thread=False)
         self._create_tables()
+
+    def _open_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        with self._conns_lock:
+            self._open_connections.append(conn)
+        return conn
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """Połączenie bieżącego wątku (SQLite nie pozwala używać go z innego wątku)."""
+        if self._shared is not None:
+            return self._shared
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._open_connection()
+            self._local.conn = conn
+        return conn
 
     def _create_tables(self):
         cursor = self.connection.cursor()
@@ -684,5 +711,14 @@ class Store:
         return [row[0] for row in cursor.fetchall()]
 
     def close(self):
-        if self.connection:
-            self.connection.close()
+        """Zamyka wszystkie połączenia (ze wszystkich wątków)."""
+        if self._shared is not None:
+            self._shared.close()
+        with self._conns_lock:
+            for conn in self._open_connections:
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass
+            self._open_connections.clear()
+        self._local = threading.local()
