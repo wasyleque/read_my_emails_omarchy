@@ -28,10 +28,9 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 - **Zaległe, starsze nieprzeczytane maile.** Jeśli któreś wyglądają na ważne, aplikacja pyta osobno, czy chcesz je
   usłyszeć. Odpowiedź jest zapamiętywana, także po restarcie.
 - **Podsumowanie tematów — „łączenie kropek”.** Domyślnie ostatni miesiąc (konfigurowalnie): wątki, kto do kogo pisał,
-  dlaczego i czy sprawa czeka na Ciebie, czy na innych. *(Rdzeń gotowy; indeksowanie Twoich wysłanych maili jest
-  w trakcie — patrz stan prac.)*
+  dlaczego i czy sprawa czeka na Ciebie, czy na innych. *(Używane na żywej poczcie, także z folderem Wysłane.)*
 - **Karta kontaktu i „Wyszukaj maila (AI)”.** Pokazuje pełny kontekst osoby, gdy zamierzasz odpisać, i znajduje
-  najbardziej prawdopodobne maile z opisu własnymi słowami, z uzasadnieniem i pewnością. *(Stan jak wyżej.)*
+  najbardziej prawdopodobne maile z opisu własnymi słowami, z uzasadnieniem i pewnością. *(Pokryte testami; na żywej poczcie jeszcze mało używane.)*
 - **Przyciski „Ignoruj…” i „VIP…”** przy każdym ważnym mailu (komputer i telefon): zignoruj *podobne maile* (ten sam nadawca
   i temat), *wszystko od nadawcy* albo *całą domenę* — lub działaj odwrotnie i oznacz jako **VIP**, żeby takie maile
   zawsze powiadamiały. Reguły są na liście w Ustawieniach (można je usuwać); zignorowane wątki znikają z podsumowania
@@ -76,7 +75,7 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 | Sejf haseł: keyring, szyfrowany plik, backend FIDO2 | ✅ (FIDO2 tylko na atrapie urządzenia) |
 | Głos: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (atrapy; bez testu na prawdziwym audio) |
 | GUI: kreator, okno główne, ustawienia, zasobnik, PL/EN | ✅ (używane na żywo na Linuksie) |
-| Podsumowanie tematów, łączenie wątków, karta kontaktu, wyszukiwanie AI | ✅ rdzeń · ⏳ indeksowanie wysłanych |
+| Podsumowanie tematów, łączenie wątków, karta kontaktu, wyszukiwanie AI | ✅ (z indeksowaniem wysłanych) |
 | Utwardzenie antyphishingowe | ✅ wdrożone, heurystyki strojone na kilku prawdziwych skrzynkach ([#9](../../issues/9)) |
 | Aplikacja na Androida (parowanie QR, powiadomienia, głos, podsumowanie tematów, Ignoruj/VIP) | ✅ przetestowana na prawdziwym telefonie |
 | Testy na żywej poczcie: IMAP + AI + głos na Linuksie | ✅ częściowo (kilka skrzynek) |

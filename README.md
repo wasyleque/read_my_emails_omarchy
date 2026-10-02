@@ -28,11 +28,10 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 - **Backlog of older unread mail.** If older **unread** messages look important, the app asks separately whether you want
   to hear them. Your answer is remembered, also across restarts.
 - **Topic digest — "connect the dots".** Summarises the last month by default (configurable): threads, who wrote to
-  whom, why, and whether the ball is in your court or waiting on others. *(Core in place; indexing of your sent mail is
-  being finished — see status.)*
+  whom, why, and whether the ball is in your court or waiting on others. *(Used on live mail, including your sent mail.)*
 - **Contact card and "AI mail search".** Shows the full context of a person when you are about to reply, and finds the
   likeliest mails from a plain-language description (e.g. *"that mail from Kowalski about the renovation invoice"*),
-  with a reason and a confidence level. *(Same status as above.)*
+  with a reason and a confidence level. *(Covered by tests; not yet exercised much on live mail.)*
 - **"Ignore…" and "VIP…" buttons** next to every important mail (desktop and phone): ignore *similar mail* (same sender
   and topic), *everything from the sender* or *the whole domain* — or the exact opposite, mark it **VIP** so such mail is
   always reported. Rules are listed (and removable) in Settings; ignored threads disappear from the digest and VIP
@@ -77,7 +76,7 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 | Secret storage: keyring, encrypted file, FIDO2 backend | ✅ (FIDO2 on a fake device only) |
 | Voice: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (fakes; no real audio hardware test) |
 | GUI: wizard, main window, settings, tray, PL/EN | ✅ (used live on Linux) |
-| Topic digest, thread linking, contact card, AI search | ✅ core · ⏳ sent-mail indexing |
+| Topic digest, thread linking, contact card, AI search | ✅ (incl. sent-mail indexing) |
 | Anti-phishing hardening | ✅ implemented, heuristics tuned on a few real mailboxes ([#9](../../issues/9)) |
 | Android companion app (QR pairing, notifications, voice, topic digest, Ignore/VIP) | ✅ tested on a real phone |
 | Live-mailbox tests: IMAP + AI + voice on Linux | ✅ partial (several mailboxes) |
