@@ -1,5 +1,4 @@
-"""Okno ustawień aplikacji MailVoice."""
-
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -36,6 +35,44 @@ from mailvoice.ui.wizard import ImapTestWorker
 from mailvoice.voice.tts import FakeSpeaker, PiperSpeaker, Speaker, VoiceUnavailable
 
 
+@dataclass
+class AccountDraft:
+    """Robocza wersja konta w oknie dialogowym ustawień."""
+
+    original_name: str | None
+    name: str
+    provider_id: str
+    host: str
+    port: int
+    username: str
+    use_ssl: bool
+    sent_folder: str
+    folders: list[str] = field(default_factory=lambda: ["INBOX"])
+    new_password: str | None = None
+    has_stored_password: bool = False
+
+
+def detect_provider_id(acc: AccountConfig) -> str:
+    """Wykrywa identyfikator dostawcy poczty na podstawie konfiguracji konta."""
+    for p in get_providers():
+        if p.provider_id != "other" and p.host.lower() == acc.host.lower():
+            return p.provider_id
+    domain = acc.username.split("@")[-1].lower() if "@" in acc.username else ""
+    if "gmail" in domain:
+        return "gmail"
+    if "outlook" in domain or "hotmail" in domain:
+        return "outlook"
+    if "wp.pl" in domain:
+        return "wp"
+    if "o2.pl" in domain:
+        return "o2"
+    if "onet.pl" in domain:
+        return "onet"
+    if "interia" in domain:
+        return "interia"
+    return "other"
+
+
 class SettingsDialog(QDialog):
     """Okno dialogowe konfiguracji aplikacji MailVoice."""
 
@@ -55,9 +92,13 @@ class SettingsDialog(QDialog):
         self.speaker = speaker or FakeSpeaker()
         self.on_config_saved = on_config_saved
         self.worker: ImapTestWorker | None = None
+        self.account_drafts: list[AccountDraft] = []
+        self.deleted_account_names: list[str] = []
+        self._current_account_index: int = -1
+        self._is_updating_form: bool = False
 
         self.setWindowTitle(tr("settings_title"))
-        self.resize(650, 480)
+        self.resize(780, 520)
         self._init_ui()
         self._load_values()
 
@@ -104,7 +145,43 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _init_account_tab(self) -> None:
-        layout = QVBoxLayout(self.tab_account)
+        main_layout = QHBoxLayout(self.tab_account)
+
+        # Lewa strona: lista kont i przyciski akcji
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        lbl_list = QLabel(tr("accounts_list_title"))
+        lbl_list.setStyleSheet("font-weight: bold;")
+        left_layout.addWidget(lbl_list)
+
+        self.list_accounts = QListWidget()
+        self.list_accounts.currentRowChanged.connect(self._on_account_selection_changed)
+        left_layout.addWidget(self.list_accounts)
+
+        btn_row = QHBoxLayout()
+        self.btn_add_account = QPushButton(tr("btn_add_account"))
+        self.btn_add_account.clicked.connect(self._on_add_account)
+        btn_row.addWidget(self.btn_add_account)
+
+        self.btn_remove_account = QPushButton(tr("btn_remove_account"))
+        self.btn_remove_account.clicked.connect(self._on_remove_account)
+        btn_row.addWidget(self.btn_remove_account)
+        left_layout.addLayout(btn_row)
+
+        left_widget.setFixedWidth(300)
+        main_layout.addWidget(left_widget)
+
+        # Prawa strona: formularz edycji konta
+        self.account_details_widget = QWidget()
+        right_layout = QVBoxLayout(self.account_details_widget)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+
+        lbl_details = QLabel(tr("account_details_title"))
+        lbl_details.setStyleSheet("font-weight: bold;")
+        right_layout.addWidget(lbl_details)
+
         form = QFormLayout()
 
         self.cb_provider = QComboBox()
@@ -115,24 +192,27 @@ class SettingsDialog(QDialog):
         form.addRow(tr("step2_provider"), self.cb_provider)
 
         self.txt_email = QLineEdit()
+        self.txt_email.textChanged.connect(self._on_account_input_changed)
         form.addRow(tr("step2_email"), self.txt_email)
 
         self.txt_password = QLineEdit()
         self.txt_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.txt_password.setPlaceholderText("•••••••• (pozostaw puste, aby nie zmieniać)")
+        self.txt_password.textChanged.connect(self._on_account_input_changed)
         form.addRow(tr("step2_password"), self.txt_password)
 
-        self.txt_email.textChanged.connect(self._on_account_input_changed)
-        self.txt_password.textChanged.connect(self._on_account_input_changed)
+        self.lbl_password_status = QLabel("")
+        self.lbl_password_status.setWordWrap(True)
+        form.addRow("", self.lbl_password_status)
 
-        layout.addLayout(form)
+        right_layout.addLayout(form)
 
         self.lbl_help = QLabel()
         self.lbl_help.setWordWrap(True)
         self.lbl_help.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
-        layout.addWidget(self.lbl_help)
+        right_layout.addWidget(self.lbl_help)
 
-        # Przycisk sprawdzania połączenia i etykieta wyniku
+        # Sprawdzanie połączenia
         test_container = QVBoxLayout()
         test_row = QHBoxLayout()
         self.btn_test = QPushButton(tr("step2_test_btn"))
@@ -156,7 +236,7 @@ class SettingsDialog(QDialog):
         self.txt_details.setVisible(False)
         test_container.addWidget(self.txt_details)
 
-        layout.addLayout(test_container)
+        right_layout.addLayout(test_container)
 
         # Sekcja zaawansowana
         self.acc_advanced = QGroupBox(tr("step2_advanced"))
@@ -174,10 +254,17 @@ class SettingsDialog(QDialog):
 
         self.chk_ssl = QCheckBox("SSL / TLS")
         self.chk_ssl.setChecked(True)
+        self.chk_ssl.toggled.connect(self._on_account_input_changed)
         adv_form.addRow("", self.chk_ssl)
 
-        layout.addWidget(self.acc_advanced)
-        layout.addStretch()
+        self.txt_sent_folder = QLineEdit()
+        self.txt_sent_folder.textChanged.connect(self._on_account_input_changed)
+        adv_form.addRow(tr("step2_sent_folder"), self.txt_sent_folder)
+
+        right_layout.addWidget(self.acc_advanced)
+        right_layout.addStretch()
+
+        main_layout.addWidget(self.account_details_widget)
 
     def _init_analysis_tab(self) -> None:
         layout = QVBoxLayout(self.tab_analysis)
@@ -307,13 +394,45 @@ class SettingsDialog(QDialog):
         layout.addStretch()
 
     def _load_values(self) -> None:
-        # Konto
-        if self.config.accounts:
-            acc = self.config.accounts[0]
-            self.txt_email.setText(acc.username)
-            self.txt_host.setText(acc.host)
-            self.txt_port.setText(str(acc.port))
-            self.chk_ssl.setChecked(acc.use_ssl)
+        # Konta
+        self.account_drafts.clear()
+        self.deleted_account_names.clear()
+        self.list_accounts.clear()
+
+        for acc in self.config.accounts:
+            p_id = detect_provider_id(acc)
+            has_secret = False
+            try:
+                stored = self.secret_store.get(acc.name)
+                has_secret = bool(stored)
+            except Exception:
+                has_secret = False
+
+            draft = AccountDraft(
+                original_name=acc.name,
+                name=acc.name,
+                provider_id=p_id,
+                host=acc.host,
+                port=acc.port,
+                username=acc.username,
+                use_ssl=acc.use_ssl,
+                sent_folder=acc.sent_folder,
+                folders=list(acc.folders) if acc.folders else ["INBOX"],
+                new_password=None,
+                has_stored_password=has_secret,
+            )
+            self.account_drafts.append(draft)
+            item = QListWidgetItem()
+            self.list_accounts.addItem(item)
+            self._update_list_item(len(self.account_drafts) - 1)
+
+        if self.account_drafts:
+            self.list_accounts.setCurrentRow(0)
+        else:
+            self._current_account_index = -1
+            self._clear_form()
+            self.account_details_widget.setEnabled(False)
+            self.btn_remove_account.setEnabled(False)
 
         # Reguły
         self.txt_desc.setText(self.config.analysis_prompt)
@@ -338,16 +457,213 @@ class SettingsDialog(QDialog):
         self.txt_local_url.setText(self.config.ollama.local_url)
         self.txt_lan_url.setText(self.config.ollama.lan_url)
 
+    def _load_draft_to_form(self, draft: AccountDraft) -> None:
+        self._is_updating_form = True
+        try:
+            idx = self.cb_provider.findData(draft.provider_id)
+            if idx >= 0:
+                self.cb_provider.setCurrentIndex(idx)
+            else:
+                self.cb_provider.setCurrentIndex(self.cb_provider.findData("other"))
+
+            self.txt_email.setText(draft.username)
+            self.txt_password.setText(draft.new_password or "")
+            self.txt_host.setText(draft.host)
+            self.txt_port.setText(str(draft.port))
+            self.chk_ssl.setChecked(draft.use_ssl)
+            self.txt_sent_folder.setText(draft.sent_folder)
+
+            provider = get_provider_by_id(draft.provider_id)
+            lang = get_language()
+            help_text = provider.help_text_pl if lang == "pl" else provider.help_text_en
+            self.lbl_help.setText(help_text)
+
+            self.lbl_test_result.setText("")
+            self.btn_details.setVisible(False)
+            self.txt_details.setVisible(False)
+
+            self._update_password_status_label(draft)
+        finally:
+            self._is_updating_form = False
+
+    def _clear_form(self) -> None:
+        self._is_updating_form = True
+        try:
+            self.txt_email.clear()
+            self.txt_password.clear()
+            self.txt_host.clear()
+            self.txt_port.setText("993")
+            self.chk_ssl.setChecked(True)
+            self.txt_sent_folder.clear()
+            self.lbl_help.setText("")
+            self.lbl_test_result.setText("")
+            self.lbl_password_status.setText("")
+            self.btn_details.setVisible(False)
+            self.txt_details.setVisible(False)
+        finally:
+            self._is_updating_form = False
+
+    def _save_form_to_draft(self, index: int) -> None:
+        if index < 0 or index >= len(self.account_drafts):
+            return
+        draft = self.account_drafts[index]
+        email = self.txt_email.text().strip()
+        draft.name = email
+        draft.username = email
+        p_id = self.cb_provider.currentData()
+        if p_id:
+            draft.provider_id = p_id
+        draft.host = self.txt_host.text().strip()
+        try:
+            draft.port = int(self.txt_port.text().strip())
+        except ValueError:
+            draft.port = 993
+        draft.use_ssl = self.chk_ssl.isChecked()
+        draft.sent_folder = self.txt_sent_folder.text().strip()
+        pwd = self.txt_password.text()
+        if pwd:
+            draft.new_password = pwd
+        else:
+            draft.new_password = None
+        self._update_list_item(index)
+
+    def _update_list_item(self, index: int) -> None:
+        item = self.list_accounts.item(index)
+        if not item or index >= len(self.account_drafts):
+            return
+        draft = self.account_drafts[index]
+        display_name = draft.name.strip() if draft.name.strip() else tr("new_account_label")
+        provider = get_provider_by_id(draft.provider_id)
+        has_pwd = (draft.new_password is not None) or draft.has_stored_password
+        status_text = tr("acc_status_pwd_saved") if has_pwd else tr("acc_status_no_pwd")
+        item.setText(f"{display_name}\n{provider.display_name} • {status_text}")
+
+    def _update_password_status_label(self, draft: AccountDraft) -> None:
+        if draft.new_password:
+            self.lbl_password_status.setStyleSheet(f"color: {theme.c('accent')}; font-size: 11px;")
+            self.lbl_password_status.setText(
+                "● Nowe hasło wprowadzone" if get_language() == "pl" else "● New password entered"
+            )
+        elif draft.has_stored_password:
+            self.lbl_password_status.setStyleSheet(f"color: {theme.c('ok')}; font-size: 11px;")
+            self.lbl_password_status.setText(
+                "✓ Hasło zapisane w sejfie"
+                if get_language() == "pl"
+                else "✓ Password saved in vault"
+            )
+        else:
+            self.lbl_password_status.setStyleSheet(f"color: {theme.c('warn')}; font-size: 11px;")
+            self.lbl_password_status.setText(
+                "⚠ Brak hasła (wprowadź hasło)"
+                if get_language() == "pl"
+                else "⚠ No password (enter password)"
+            )
+
+    def _on_account_selection_changed(self, new_row: int) -> None:
+        if self._is_updating_form:
+            return
+
+        if 0 <= self._current_account_index < len(self.account_drafts):
+            self._save_form_to_draft(self._current_account_index)
+
+        self._current_account_index = new_row
+        if 0 <= new_row < len(self.account_drafts):
+            draft = self.account_drafts[new_row]
+            self._load_draft_to_form(draft)
+            self.account_details_widget.setEnabled(True)
+            self.btn_remove_account.setEnabled(True)
+        else:
+            self._clear_form()
+            self.account_details_widget.setEnabled(False)
+            self.btn_remove_account.setEnabled(False)
+
+    def _on_add_account(self) -> None:
+        if 0 <= self._current_account_index < len(self.account_drafts):
+            self._save_form_to_draft(self._current_account_index)
+
+        default_provider = self.providers[0] if self.providers else get_provider_by_id("gmail")
+        new_draft = AccountDraft(
+            original_name=None,
+            name="",
+            provider_id=default_provider.provider_id,
+            host=default_provider.host,
+            port=default_provider.port,
+            username="",
+            use_ssl=default_provider.use_ssl,
+            sent_folder=default_provider.sent_folder,
+            folders=["INBOX"],
+            new_password=None,
+            has_stored_password=False,
+        )
+        self.account_drafts.append(new_draft)
+        item = QListWidgetItem()
+        self.list_accounts.addItem(item)
+        new_row = len(self.account_drafts) - 1
+        self._update_list_item(new_row)
+        self.list_accounts.setCurrentRow(new_row)
+        self.txt_email.setFocus()
+
+    def _on_remove_account(self) -> None:
+        row = self.list_accounts.currentRow()
+        if row < 0 or row >= len(self.account_drafts):
+            return
+
+        draft = self.account_drafts[row]
+        acc_name = draft.name or draft.username or tr("new_account_label")
+
+        reply = QMessageBox.question(
+            self,
+            tr("remove_account_title"),
+            tr("remove_account_confirm", account=acc_name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        if draft.original_name:
+            self.deleted_account_names.append(draft.original_name)
+        elif draft.name and draft.has_stored_password:
+            self.deleted_account_names.append(draft.name)
+
+        self.account_drafts.pop(row)
+        self.list_accounts.takeItem(row)
+
+        new_count = len(self.account_drafts)
+        if new_count == 0:
+            self._current_account_index = -1
+            self._clear_form()
+            self.account_details_widget.setEnabled(False)
+            self.btn_remove_account.setEnabled(False)
+        else:
+            new_row = min(row, new_count - 1)
+            self.list_accounts.setCurrentRow(new_row)
+
     def _on_provider_changed(self, index: int) -> None:
         p_id = self.cb_provider.currentData()
+        if not p_id:
+            return
         provider = get_provider_by_id(p_id)
-        if provider.host:
-            self.txt_host.setText(provider.host)
-            self.txt_port.setText(str(provider.port))
-            self.chk_ssl.setChecked(provider.use_ssl)
         lang = get_language()
         help_text = provider.help_text_pl if lang == "pl" else provider.help_text_en
         self.lbl_help.setText(help_text)
+
+        if not self._is_updating_form and 0 <= self._current_account_index < len(
+            self.account_drafts
+        ):
+            draft = self.account_drafts[self._current_account_index]
+            draft.provider_id = p_id
+            if provider.host:
+                self.txt_host.setText(provider.host)
+                draft.host = provider.host
+                self.txt_port.setText(str(provider.port))
+                draft.port = provider.port
+                self.chk_ssl.setChecked(provider.use_ssl)
+                draft.use_ssl = provider.use_ssl
+            if provider.sent_folder:
+                self.txt_sent_folder.setText(provider.sent_folder)
+                draft.sent_folder = provider.sent_folder
+            self._update_list_item(self._current_account_index)
 
     def _toggle_details(self) -> None:
         visible = not self.txt_details.isVisible()
@@ -359,11 +675,43 @@ class SettingsDialog(QDialog):
         self.btn_details.setVisible(False)
         self.txt_details.setVisible(False)
 
+        if self._is_updating_form:
+            return
+
+        if 0 <= self._current_account_index < len(self.account_drafts):
+            draft = self.account_drafts[self._current_account_index]
+            email = self.txt_email.text().strip()
+            draft.name = email
+            draft.username = email
+            draft.host = self.txt_host.text().strip()
+            try:
+                draft.port = int(self.txt_port.text().strip())
+            except ValueError:
+                draft.port = 993
+            draft.use_ssl = self.chk_ssl.isChecked()
+            draft.sent_folder = self.txt_sent_folder.text().strip()
+            pwd = self.txt_password.text()
+            if pwd:
+                draft.new_password = pwd
+            else:
+                draft.new_password = None
+            self._update_list_item(self._current_account_index)
+            self._update_password_status_label(draft)
+
     def _on_test_connection(self) -> None:
         email = self.txt_email.text().strip()
         pwd = self.txt_password.text()
-        if not pwd and email:
+        if not pwd and 0 <= self._current_account_index < len(self.account_drafts):
+            draft = self.account_drafts[self._current_account_index]
+            if draft.new_password:
+                pwd = draft.new_password
+            elif draft.original_name:
+                pwd = self.secret_store.get(draft.original_name) or ""
+            elif email:
+                pwd = self.secret_store.get(email) or ""
+        elif not pwd and email:
             pwd = self.secret_store.get(email) or ""
+
         host = self.txt_host.text().strip()
         try:
             port = int(self.txt_port.text().strip())
@@ -445,34 +793,80 @@ class SettingsDialog(QDialog):
             self.lbl_voice_status.setText(str(exc))
 
     def _on_save(self) -> None:
-        email = self.txt_email.text().strip()
-        password = self.txt_password.text()
-        if password and email:
-            self.secret_store.set(email, password)
+        if 0 <= self._current_account_index < len(self.account_drafts):
+            self._save_form_to_draft(self._current_account_index)
 
-        host = self.txt_host.text().strip()
-        try:
-            port = int(self.txt_port.text().strip())
-        except ValueError:
-            port = 993
+        # Walidacja kont
+        seen_names: set[str] = set()
+        for idx, draft in enumerate(self.account_drafts):
+            email = draft.username.strip()
+            if not email:
+                QMessageBox.warning(self, "MailVoice", tr("account_empty_email_error"))
+                self.list_accounts.setCurrentRow(idx)
+                self.txt_email.setFocus()
+                return
 
-        accounts = []
-        if email:
-            p_id = self.cb_provider.currentData()
-            provider = get_provider_by_id(p_id)
-            accounts.append(
+            email_lower = email.lower()
+            if email_lower in seen_names:
+                QMessageBox.warning(self, "MailVoice", tr("account_duplicate_error", account=email))
+                self.list_accounts.setCurrentRow(idx)
+                return
+            seen_names.add(email_lower)
+
+            if draft.port < 1 or draft.port > 65535:
+                QMessageBox.warning(
+                    self, "MailVoice", tr("account_invalid_port_error", account=email)
+                )
+                self.list_accounts.setCurrentRow(idx)
+                self.txt_port.setFocus()
+                return
+
+            if not draft.use_ssl:
+                QMessageBox.warning(
+                    self, "MailVoice", tr("account_ssl_required_error", account=email)
+                )
+                self.list_accounts.setCurrentRow(idx)
+                return
+
+        # Migracja i aktualizacja sekretów w SecretStore
+        active_names = {draft.name for draft in self.account_drafts}
+        for name in self.deleted_account_names:
+            if name not in active_names:
+                try:
+                    self.secret_store.delete(name)
+                except Exception:
+                    pass
+
+        for draft in self.account_drafts:
+            old_name = draft.original_name
+            new_name = draft.name
+
+            if old_name and old_name != new_name:
+                old_secret = self.secret_store.get(old_name)
+                pwd_to_save = draft.new_password if draft.new_password is not None else old_secret
+                if pwd_to_save:
+                    self.secret_store.set(new_name, pwd_to_save)
+                self.secret_store.delete(old_name)
+                draft.original_name = new_name
+            else:
+                if draft.new_password is not None:
+                    self.secret_store.set(new_name, draft.new_password)
+
+        new_accounts: list[AccountConfig] = []
+        for draft in self.account_drafts:
+            provider = get_provider_by_id(draft.provider_id)
+            sent_f = draft.sent_folder.strip() or provider.sent_folder
+            new_accounts.append(
                 AccountConfig(
-                    name=email,
-                    host=host or provider.host,
-                    port=port,
-                    username=email,
-                    use_ssl=self.chk_ssl.isChecked(),
-                    folders=["INBOX"],
-                    sent_folder=provider.sent_folder,
+                    name=draft.name,
+                    host=draft.host or provider.host,
+                    port=draft.port,
+                    username=draft.username,
+                    use_ssl=draft.use_ssl,
+                    folders=draft.folders or ["INBOX"],
+                    sent_folder=sent_f,
                 )
             )
-        elif self.config.accounts:
-            accounts = self.config.accounts
 
         vip_senders = [self.list_vip.item(i).text() for i in range(self.list_vip.count())]
         keywords = [self.list_kw.item(i).text() for i in range(self.list_kw.count())]
@@ -486,7 +880,7 @@ class SettingsDialog(QDialog):
         )
 
         new_config = AppConfig(
-            accounts=accounts,
+            accounts=new_accounts,
             analysis_prompt=self.txt_desc.toPlainText().strip(),
             vip_senders=vip_senders,
             keywords=keywords,
@@ -497,8 +891,10 @@ class SettingsDialog(QDialog):
             ask_retry_minutes=self.config.ask_retry_minutes,
             importance_threshold=self.slider.value(),
             backlog_days=self.config.backlog_days,
+            language=self.config.language,
+            index_retention_days=self.config.index_retention_days,
             digest_days=self.spin_digest_days.value(),
-            language=get_language(),
+            my_addresses=self.config.my_addresses,
             ollama=ollama_cfg,
         )
 

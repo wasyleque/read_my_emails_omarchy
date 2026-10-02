@@ -159,6 +159,8 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._init_tray()
         self._init_timer()
+        if self.service and not self.service.config.accounts:
+            self.lbl_status.setText(tr("status_no_accounts"))
 
     def _init_ui(self) -> None:
         central_widget = QWidget(self)
@@ -194,12 +196,13 @@ class MainWindow(QMainWindow):
         lbl_section.setStyleSheet("font-weight: bold; margin-top: 4px; margin-bottom: 4px;")
         msg_layout.addWidget(lbl_section)
 
-        self.tbl_mails = QTableWidget(0, 4)
+        self.tbl_mails = QTableWidget(0, 5)
         self.tbl_mails.setHorizontalHeaderLabels(
             [
                 tr("col_sender"),
                 tr("col_subject"),
                 tr("col_reason"),
+                tr("col_account"),
                 tr("col_actions"),
             ]
         )
@@ -208,6 +211,9 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        if not self.service or len(self.service.config.accounts) <= 1:
+            self.tbl_mails.setColumnHidden(3, True)
         self.tbl_mails.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.tbl_mails.itemSelectionChanged.connect(self._on_mail_selection_changed)
         msg_layout.addWidget(self.tbl_mails)
@@ -388,6 +394,10 @@ class MainWindow(QMainWindow):
     def _start_cycle_worker(self, check_backlog: bool = False) -> None:
         if not self.service:
             return
+        if not self.service.config.accounts:
+            self.lbl_status.setText(tr("status_no_accounts"))
+            self.btn_check_now.setEnabled(True)
+            return
         self.lbl_status.setText(tr("status_checking"))
         self.btn_error_details.setVisible(False)
         self.btn_check_now.setEnabled(False)
@@ -455,10 +465,11 @@ class MainWindow(QMainWindow):
         self.tbl_mails.setItem(row, 0, QTableWidgetItem(sender_text))
         self.tbl_mails.setItem(row, 1, QTableWidgetItem(subject_text))
         self.tbl_mails.setItem(row, 2, QTableWidgetItem(reason))
+        self.tbl_mails.setItem(row, 3, QTableWidgetItem(item.account))
 
         btn_listen = QPushButton(tr("btn_listen_summary"))
         btn_listen.clicked.connect(lambda _, m=item: self._listen_to_mail(m))
-        self.tbl_mails.setCellWidget(row, 3, btn_listen)
+        self.tbl_mails.setCellWidget(row, 4, btn_listen)
 
     def _listen_to_mail(self, item: ProcessedMail) -> None:
         """Odtwarza streszczenie wybranego maila."""
@@ -529,8 +540,13 @@ class MainWindow(QMainWindow):
 
     def _on_config_updated(self, new_config: AppConfig) -> None:
         if self.service:
-            self.service.config = new_config
+            self.service.update_config(new_config)
             save_config(new_config, self.config_path)
+            self.tbl_mails.setColumnHidden(3, len(new_config.accounts) <= 1)
+            if not new_config.accounts:
+                self.lbl_status.setText(tr("status_no_accounts"))
+            elif self.lbl_status.text() == tr("status_no_accounts"):
+                self.lbl_status.setText(tr("status_ready"))
 
     def _on_service_event(self, event: Event) -> None:
         """Odbiera zdarzenie z wątku serwisu i emituje sygnał do GUI."""

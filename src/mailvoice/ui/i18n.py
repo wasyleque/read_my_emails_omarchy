@@ -80,6 +80,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "app_title": "MailVoice",
         "status_ready": "Wszystko działa poprawnie",
         "status_checking": "Sprawdzam nową pocztę...",
+        "status_no_accounts": (
+            "Brak skonfigurowanych skrzynek pocztowych. Dodaj pierwsze konto w Ustawieniach."
+        ),
         "status_last_check": "Ostatnie sprawdzenie:",
         "status_never": "brak danych",
         "btn_check_now": "Sprawdź teraz",
@@ -88,6 +91,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_settings": "Ustawienia",
         "section_important": "Ostatnie ważne wiadomości",
         "btn_listen_summary": "Posłuchaj streszczenia",
+        "col_account": "Konto",
         "col_sender": "Od",
         "col_subject": "Temat",
         "col_reason": "Dlaczego ważny?",
@@ -104,7 +108,32 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tray_exit": "Zakończ program",
         # Ustawienia
         "settings_title": "Ustawienia MailVoice",
-        "tab_account": "Konto pocztowe",
+        "tab_account": "Konta pocztowe",
+        "accounts_list_title": "Skonfigurowane konta:",
+        "btn_add_account": "Dodaj konto",
+        "btn_remove_account": "Usuń konto",
+        "remove_account_title": "Usuń konto",
+        "remove_account_confirm": (
+            "Czy na pewno chcesz usunąć konto '{account}'? "
+            "Spowoduje to także usunięcie zapisanego hasła."
+        ),
+        "account_details_title": "Szczegóły wybranego konta",
+        "acc_status_pwd_saved": "hasło zapisane",
+        "acc_status_no_pwd": "brak hasła",
+        "new_account_label": "Nowe konto",
+        "account_empty_email_error": "Każde konto musi mieć wpisany adres e-mail.",
+        "account_invalid_port_error": (
+            "Numer portu dla konta '{account}' musi być liczbą od 1 do 65535."
+        ),
+        "account_ssl_required_error": "Konto '{account}' wymaga bezpiecznego połączenia SSL / TLS.",
+        "account_duplicate_error": (
+            "To konto już jest na liście: '{account}'. Adresy kont muszą być unikalne."
+        ),
+        "account_no_account_selected": "Wybierz konto z listy lub kliknij Dodaj konto.",
+        "step2_multi_hint": (
+            "Wskazówka: kolejne skrzynki pocztowe możesz dodać w dowolnym momencie w Ustawieniach."
+        ),
+        "step2_sent_folder": "Folder Wysłane:",
         "tab_analysis": "Ocenianie ważności",
         "tab_notifications": "Głos i powiadomienia",
         "tab_ollama": "Model AI (Ollama)",
@@ -245,6 +274,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "app_title": "MailVoice",
         "status_ready": "All systems operational",
         "status_checking": "Checking for new mail...",
+        "status_no_accounts": "No mailboxes configured. Add your first account in Settings.",
         "status_last_check": "Last check:",
         "status_never": "none",
         "btn_check_now": "Check Now",
@@ -253,6 +283,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_settings": "Settings",
         "section_important": "Recent Important Messages",
         "btn_listen_summary": "Listen to Summary",
+        "col_account": "Account",
         "col_sender": "From",
         "col_subject": "Subject",
         "col_reason": "Why Important?",
@@ -269,7 +300,30 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tray_exit": "Quit",
         # Settings
         "settings_title": "MailVoice Settings",
-        "tab_account": "Email Account",
+        "tab_account": "Email Accounts",
+        "accounts_list_title": "Configured accounts:",
+        "btn_add_account": "Add account",
+        "btn_remove_account": "Remove account",
+        "remove_account_title": "Remove account",
+        "remove_account_confirm": (
+            "Are you sure you want to remove account '{account}'? "
+            "This will also remove the stored password."
+        ),
+        "account_details_title": "Selected account details",
+        "acc_status_pwd_saved": "password saved",
+        "acc_status_no_pwd": "no password",
+        "new_account_label": "New account",
+        "account_empty_email_error": "Every account must have an email address specified.",
+        "account_invalid_port_error": (
+            "Port number for account '{account}' must be between 1 and 65535."
+        ),
+        "account_ssl_required_error": "Account '{account}' requires secure SSL / TLS connection.",
+        "account_duplicate_error": (
+            "This account is already on the list: '{account}'. Account addresses must be unique."
+        ),
+        "account_no_account_selected": "Select an account from the list or click Add account.",
+        "step2_multi_hint": ("Tip: You can add additional mailboxes at any time in Settings."),
+        "step2_sent_folder": "Sent folder:",
         "tab_analysis": "Evaluation Rules",
         "tab_notifications": "Voice & Notifications",
         "tab_ollama": "AI Model (Ollama)",

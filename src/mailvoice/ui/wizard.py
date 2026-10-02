@@ -204,6 +204,12 @@ class AccountPage(QWizardPage):
         adv_form.addRow("", self.chk_ssl)
 
         layout.addWidget(self.advanced_box)
+
+        self.lbl_multi_hint = QLabel(tr("step2_multi_hint"))
+        self.lbl_multi_hint.setWordWrap(True)
+        self.lbl_multi_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        layout.addWidget(self.lbl_multi_hint)
+
         layout.addStretch()
 
         self._on_provider_changed(0)

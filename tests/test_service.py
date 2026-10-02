@@ -424,3 +424,121 @@ def test_service_suspicious_mail_triggers_event(store, secret_store):
     assert len(suspicious_events) == 1
     assert suspicious_events[0].mail.mail.message_id == "<phish_srv_1@fakepko.xyz>"
     assert len(suspicious_events[0].reasons) > 0
+
+
+def test_service_update_config(store, secret_store):
+    """Aktualizacja konfiguracji w locie zmienia ustawienia bez restartu."""
+    config1 = AppConfig(
+        accounts=[AccountConfig(name="acc1", host="imap.local")],
+        notify_mode="beep",
+        beep_repeat_minutes=5,
+        ask_retry_minutes=15,
+    )
+    ollama = OllamaClient(config1.ollama)
+    service = MailService(
+        config=config1,
+        store=store,
+        secret_store=secret_store,
+        ollama_client=ollama,
+    )
+
+    assert len(service.config.accounts) == 1
+    assert service.notifier.notify_mode == "beep"
+
+    config2 = AppConfig(
+        accounts=[
+            AccountConfig(name="acc1", host="imap.local"),
+            AccountConfig(name="acc2", host="imap2.local"),
+        ],
+        notify_mode="ask",
+        beep_repeat_minutes=10,
+        ask_retry_minutes=20,
+    )
+    service.update_config(config2)
+
+    assert len(service.config.accounts) == 2
+    assert service.notifier.notify_mode == "ask"
+    assert service.notifier.beep_repeat_minutes == 10
+    assert service.notifier.ask_retry_minutes == 20
+
+
+def test_service_add_second_account_baseline(store, secret_store):
+    """Dodanie drugiego konta ustala linię bazową bez ruszania stanu pierwszego konta."""
+    clock = FakeClock()
+    config1 = AppConfig(
+        accounts=[AccountConfig(name="acc1", host="imap.local", folders=["INBOX"])],
+        importance_threshold=6,
+    )
+    secret_store.set("acc1", "Haslo1")
+    secret_store.set("acc2", "Haslo2")
+
+    client1 = FakeMailboxClient(uidvalidity=1)
+    client1.folders["INBOX"][1] = _make_email(
+        sender="old@firma.pl", subject="Stary 1", body="Treść", message_id="<old1@local>"
+    )
+    client1.folders["INBOX"][2] = _make_email(
+        sender="old@firma.pl", subject="Stary 2", body="Treść", message_id="<old2@local>"
+    )
+
+    client2 = FakeMailboxClient(uidvalidity=10)
+    client2.folders["INBOX"][10] = _make_email(
+        sender="stary2@firma.pl", subject="Stary 10", body="Treść", message_id="<old10@local>"
+    )
+    client2.folders["INBOX"][20] = _make_email(
+        sender="stary2@firma.pl", subject="Stary 20", body="Treść", message_id="<old20@local>"
+    )
+
+    def client_factory(account: AccountConfig):
+        if account.name == "acc1":
+            return client1
+        return client2
+
+    analyzed_calls = []
+
+    def mock_ollama(request: httpx.Request) -> httpx.Response:
+        analyzed_calls.append(request)
+        resp = {"importance": 8, "reason": "Ważne", "action": "read_now", "language": "pl"}
+        return httpx.Response(200, json={"message": {"content": json.dumps(resp)}})
+
+    ollama = OllamaClient(config1.ollama, transport=httpx.MockTransport(mock_ollama))
+
+    service = MailService(
+        config=config1,
+        store=store,
+        secret_store=secret_store,
+        ollama_client=ollama,
+        client_factory=client_factory,
+        clock=clock,
+    )
+
+    # 1. Pierwszy cykl acc1 -> tworzy linię bazową UID=2
+    res1 = service.trigger_cycle()
+    assert len(res1.important) == 0
+    assert store.get_last_uid("acc1", "INBOX", 1) == 2
+
+    # 2. Nowa wiadomość na acc1 -> UID=3
+    client1.folders["INBOX"][3] = _make_email(
+        sender="vip@firma.pl", subject="Nowy mail", body="Ważne", message_id="<new3@local>"
+    )
+    res2 = service.trigger_cycle()
+    assert len(res2.important) == 1
+    assert res2.important[0].uid == 3
+    assert store.get_last_uid("acc1", "INBOX", 1) == 3
+
+    # 3. Dynamiczne dodanie konta acc2 bez restartu
+    config2 = AppConfig(
+        accounts=[
+            AccountConfig(name="acc1", host="imap.local", folders=["INBOX"]),
+            AccountConfig(name="acc2", host="imap2.local", folders=["INBOX"]),
+        ],
+        importance_threshold=6,
+    )
+    service.update_config(config2)
+
+    # 4. Cykl z dwoma kontami -> acc2 tworzy linię bazową UID=20, acc1 nie ma nowości
+    res3 = service.trigger_cycle()
+    assert len(res3.important) == 0
+    # Stan acc1 nienaruszony (dalej UID=3)
+    assert store.get_last_uid("acc1", "INBOX", 1) == 3
+    # acc2 utworzyło linię bazową UID=20 bez analizowania historii
+    assert store.get_last_uid("acc2", "INBOX", 10) == 20

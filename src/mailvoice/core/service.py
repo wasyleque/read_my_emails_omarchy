@@ -200,9 +200,20 @@ class MailService:
             events.append(self._events.popleft())
         return events
 
+    def update_config(self, config: AppConfig) -> None:
+        """Aktualizuje konfigurację serwisu w locie (konta, reguły, powiadomienia, model)."""
+        self.config = config
+        self.notifier.notify_mode = config.notify_mode
+        self.notifier.beep_repeat_minutes = config.beep_repeat_minutes
+        self.notifier.ask_retry_minutes = config.ask_retry_minutes
+        self.ollama_client.cfg = config.ollama
+
     def trigger_cycle(self, check_backlog: bool = False) -> CycleResult:
         """Ręczne lub natychmiastowe wyzwolenie pełnego cyklu sprawdzania poczty."""
         now = self._clock()
+        if not self.config.accounts:
+            self.last_cycle_time = now
+            return CycleResult()
         deps = PipelineDeps(
             config=self.config,
             store=self.store,
