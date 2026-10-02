@@ -61,9 +61,11 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 - **Lokalny indeks przechowuje tylko metadane i krótkie podsumowania** (nigdy pełnych treści maili), z limitem retencji
   (`index_retention_days`, domyślnie 90).
 - **Zasady antyphishingowe są nienaruszalne** — zob. [`SECURITY.md`](SECURITY.md): aplikacja nigdy nie otwiera
-  linków, nie pobiera załączników i nie słucha instrukcji zawartych (także ukrytych) w mailach. *Te zasady są
-  kontraktem projektowym; pełne wdrożenie (bezpieczne pobieranie bez załączników, usuwanie ukrytego tekstu, ochrona
-  przed prompt injection, ocena ryzyka phishingu) jest **w toku** — śledzone w [#9](../../issues/9).*
+  linków, nie pobiera załączników i nie słucha instrukcji zawartych (także ukrytych) w mailach. Wdrożone: bezpieczne pobieranie
+  bez treści załączników, usuwanie ukrytego tekstu, znaczniki danych niezaufanych przeciw prompt injection, ocena
+  ryzyka phishingu (podszywanie się, podobne domeny, wyłudzanie danych z linkiem do obcej domeny, podszywanie pod marki),
+  linki rozbrojone i nigdy nie czytane głosem oraz testy statyczne zakazujące otwierania linków. Heurystyki były
+  strojone tylko na kilku prawdziwych skrzynkach — kolejne przypadki mile widziane w [#9](../../issues/9).
 
 ## Stan prac
 
@@ -75,7 +77,7 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 | Głos: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (atrapy; bez testu na prawdziwym audio) |
 | GUI: kreator, okno główne, ustawienia, zasobnik, PL/EN | ✅ (używane na żywo na Linuksie) |
 | Podsumowanie tematów, łączenie wątków, karta kontaktu, wyszukiwanie AI | ✅ rdzeń · ⏳ indeksowanie wysłanych |
-| Utwardzenie antyphishingowe | ⏳ w toku ([#9](../../issues/9)) |
+| Utwardzenie antyphishingowe | ✅ wdrożone, heurystyki strojone na kilku prawdziwych skrzynkach ([#9](../../issues/9)) |
 | Aplikacja na Androida (parowanie QR, powiadomienia, głos, podsumowanie tematów, Ignoruj/VIP) | ✅ przetestowana na prawdziwym telefonie |
 | Testy na żywej poczcie: IMAP + AI + głos na Linuksie | ✅ częściowo (kilka skrzynek) |
 | Więcej dostawców (Gmail/Outlook), Windows, pakowanie (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |

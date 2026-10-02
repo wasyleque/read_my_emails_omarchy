@@ -62,9 +62,11 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 - **The local index stores only metadata and short summaries** (never full mail bodies), with a retention limit
   (`index_retention_days`, default 90).
 - **Anti-phishing rules are non-negotiable** — see [`SECURITY.md`](SECURITY.md): the app never opens links, never
-  downloads attachments and never obeys instructions found (or hidden) in mail. *These rules are the design contract;
-  the full implementation (safe fetch without attachments, hidden-text stripping, prompt-injection defence, phishing
-  scoring) is **in progress** — tracked in [#9](../../issues/9). Until it lands, treat the app as experimental.*
+  downloads attachments and never obeys instructions found (or hidden) in mail. Implemented: safe fetch
+  without attachment bodies, hidden-text stripping, untrusted-data delimiters against prompt injection, phishing
+  scoring (spoofing, look-alike domains, credential lures with foreign links, brand impersonation), links defanged
+  and never read aloud, and static tests forbidding link opening. The heuristics are tuned on a few real mailboxes
+  only — more cases are welcome in [#9](../../issues/9).
 
 ## Status
 
@@ -76,7 +78,7 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 | Voice: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (fakes; no real audio hardware test) |
 | GUI: wizard, main window, settings, tray, PL/EN | ✅ (used live on Linux) |
 | Topic digest, thread linking, contact card, AI search | ✅ core · ⏳ sent-mail indexing |
-| Anti-phishing hardening | ⏳ in progress ([#9](../../issues/9)) |
+| Anti-phishing hardening | ✅ implemented, heuristics tuned on a few real mailboxes ([#9](../../issues/9)) |
 | Android companion app (QR pairing, notifications, voice, topic digest, Ignore/VIP) | ✅ tested on a real phone |
 | Live-mailbox tests: IMAP + AI + voice on Linux | ✅ partial (several mailboxes) |
 | More providers (Gmail/Outlook), Windows, packaging (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
