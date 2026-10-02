@@ -92,6 +92,10 @@ def test_saving_settings_without_changes_resets_nothing(tmp_path, monkeypatch):
         if getattr(after, f.name) != getattr(original, f.name)
     }
     # pole `ollama` może zmienić się przez wykrywanie modeli; reszta musi zostać nietknięta
-    assert changed <= {"ollama"}, f"zapis zresetował pola: {sorted(changed)}"
+    # `blocked_senders` przechodzi do `ignore_rules` (to samo działanie), `ollama` może się zmienić
+    assert changed <= {"ollama", "blocked_senders", "ignore_rules"}, (
+        f"zapis zresetował pola: {sorted(changed)}"
+    )
+    assert after.blocked_senders == [] and any(r.sender == "spam@" for r in after.ignore_rules)
     assert after.voice_output == "phone"
     assert after.server.port == 9001

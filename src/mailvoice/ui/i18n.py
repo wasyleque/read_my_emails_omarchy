@@ -84,6 +84,24 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "auto_vip_count": "Znane osoby: {addresses}, firmy: {domains}",
         "auto_vip_show": "Pokaż listę",
+        "col_ignore": "Ignoruj",
+        "btn_ignore": "Ignoruj…",
+        "ignore_title": "Ignoruj maile",
+        "ignore_question": "Jakie maile mam ignorować (nie pokazywać i nie czytać)?",
+        "ignore_mode_similar": "Podobne maile od tego nadawcy (ten sam temat)",
+        "ignore_mode_sender": "Wszystkie maile od tego nadawcy",
+        "ignore_mode_domain": "Wszystkie maile z tej domeny (całej firmy)",
+        "ignore_rule_label": "Zapamiętam regułę:",
+        "ignore_undo_hint": "Regułę możesz usunąć w Ustawieniach → Ocenianie ważności.",
+        "ignore_confirm": "Ignoruj",
+        "ignore_done": "Ignoruję: {rule} (usunięto z listy: {count})",
+        "ignore_section_label": "Ignorowane maile (nadawcy, domeny, tematy):",
+        "ignore_sender_ph": "nadawca lub domena, np. @firma.pl",
+        "ignore_subject_ph": "temat zawiera, np. newsletter",
+        "ignore_hint": (
+            "Maile pasujące do reguły są po cichu pomijane — nie trafiają na listę ważnych i nie "
+            "są czytane. Ignorowanie ma pierwszeństwo przed VIP."
+        ),
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -365,6 +383,24 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "auto_vip_count": "Known people: {addresses}, companies: {domains}",
         "auto_vip_show": "Show list",
+        "col_ignore": "Ignore",
+        "btn_ignore": "Ignore…",
+        "ignore_title": "Ignore mail",
+        "ignore_question": "Which mail should I ignore (not show and not read aloud)?",
+        "ignore_mode_similar": "Similar mail from this sender (same kind of subject)",
+        "ignore_mode_sender": "All mail from this sender",
+        "ignore_mode_domain": "All mail from this domain (the whole company)",
+        "ignore_rule_label": "I will remember the rule:",
+        "ignore_undo_hint": "You can remove the rule in Settings → Importance rules.",
+        "ignore_confirm": "Ignore",
+        "ignore_done": "Ignoring: {rule} (removed from the list: {count})",
+        "ignore_section_label": "Ignored mail (senders, domains, subjects):",
+        "ignore_sender_ph": "sender or domain, e.g. @company.com",
+        "ignore_subject_ph": "subject contains, e.g. newsletter",
+        "ignore_hint": (
+            "Mail matching a rule is silently skipped — it does not appear in the important list "
+            "and is not read aloud. Ignoring takes priority over VIP."
+        ),
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),

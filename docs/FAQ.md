@@ -36,6 +36,11 @@ Nadawcy z listy VIP oraz (opcjonalnie) osoby, do których piszesz, mają gwaranc
 (poza wiadomościami z sygnałami phishingu). Jeśli ważne maile giną: dodaj nadawcę do VIP, obniż próg albo opisz w polu „co jest dla mnie ważne”, o jaką korespondencję
 chodzi. Zmiana działa na nowe maile (już ocenione nie są przeliczane).
 
+## Jak zignorować mail lub nadawcę?
+Przy mailu na liście ważnych kliknij **„Ignoruj…”** (na komputerze lub w aplikacji na telefonie) i wybierz: podobne
+maile od tego nadawcy, wszystkie od nadawcy albo cała domena. Możesz też dodać reguły ręcznie w Ustawieniach →
+Ocenianie ważności („Ignorowane maile”). Ignorowanie ma pierwszeństwo przed VIP, a regułę można w każdej chwili usunąć.
+
 ## Czy w VIP mogę wpisać samą domenę?
 Tak. Możesz wpisać cały adres albo samą domenę, np. `@firma.pl`.
 
@@ -89,6 +94,11 @@ correspondent” — someone you have written to). A mail is listed when the sum
 (except for messages with phishing signals). If important mail gets missed: add the sender to VIP, lower the threshold, or describe in the
 “what matters to me” field which correspondence is important. Changes apply to new mail (already-scored mail is not
 re-scored).
+
+## How do I ignore a mail or sender?
+Click **“Ignore…”** next to a mail in the important list (on the computer or in the phone app) and choose: similar
+mail from this sender, all mail from the sender, or the whole domain. You can also add rules by hand in Settings →
+Importance rules (“Ignored mail”). Ignoring takes priority over VIP, and a rule can be removed at any time.
 
 ## Can I put just a domain in VIP?
 Yes. Enter a full address or just a domain, e.g. `@company.com`.

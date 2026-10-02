@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from mailvoice.core.analyzer import OllamaClient
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, ServerConfig, save_config
 from mailvoice.core.devices import DeviceManager
+from mailvoice.core.ignore import IgnoreRule
 from mailvoice.core.ollama_models import (
     CheckResult,
     Detection,
@@ -447,12 +448,64 @@ class SettingsDialog(QDialog):
         layout.addLayout(known_row)
         self._refresh_known_people()
 
+        # Ignorowane maile: reguły (nadawca / domena / temat); stara lista blokowanych nadawców
+        # jest tu pokazywana jako reguły „od: …” i po zapisie przechodzi do ignore_rules.
+        layout.addWidget(QLabel(tr("ignore_section_label")))
+        ignore_in = QHBoxLayout()
+        self.txt_ignore_sender = QLineEdit()
+        self.txt_ignore_sender.setPlaceholderText(tr("ignore_sender_ph"))
+        self.txt_ignore_subject = QLineEdit()
+        self.txt_ignore_subject.setPlaceholderText(tr("ignore_subject_ph"))
+        btn_add_ignore = QPushButton(tr("add_btn"))
+        btn_add_ignore.clicked.connect(self._add_ignore_rule)
+        ignore_in.addWidget(self.txt_ignore_sender)
+        ignore_in.addWidget(self.txt_ignore_subject)
+        ignore_in.addWidget(btn_add_ignore)
+        layout.addLayout(ignore_in)
+        self.list_ignore = QListWidget()
+        self.list_ignore.setMaximumHeight(90)
+        layout.addWidget(self.list_ignore)
+        btn_del_ignore = QPushButton(tr("remove_btn"))
+        btn_del_ignore.clicked.connect(lambda: self._remove_selected(self.list_ignore))
+        layout.addWidget(btn_del_ignore)
+        lbl_ignore_hint = QLabel(tr("ignore_hint"))
+        lbl_ignore_hint.setWordWrap(True)
+        lbl_ignore_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        layout.addWidget(lbl_ignore_hint)
+
         # Okres podsumowania tematów (dni)
         layout.addWidget(QLabel(tr("settings_digest_days_label")))
         self.spin_digest_days = QSpinBox()
         self.spin_digest_days.setRange(1, 365)
         self.spin_digest_days.setValue(self.config.digest_days)
         layout.addWidget(self.spin_digest_days)
+
+    def _add_ignore_rule(self) -> None:
+        rule = IgnoreRule(
+            sender=self.txt_ignore_sender.text().strip(),
+            subject=self.txt_ignore_subject.text().strip(),
+        )
+        if not rule.is_valid():
+            return
+        self._append_ignore_item(rule)
+        self.txt_ignore_sender.clear()
+        self.txt_ignore_subject.clear()
+
+    def _append_ignore_item(self, rule: IgnoreRule) -> None:
+        for i in range(self.list_ignore.count()):
+            if self.list_ignore.item(i).data(Qt.ItemDataRole.UserRole) == rule:
+                return
+        item = QListWidgetItem(rule.describe())
+        item.setData(Qt.ItemDataRole.UserRole, rule)
+        self.list_ignore.addItem(item)
+
+    def _collect_ignore_rules(self) -> list[IgnoreRule]:
+        rules = []
+        for i in range(self.list_ignore.count()):
+            rule = self.list_ignore.item(i).data(Qt.ItemDataRole.UserRole)
+            if isinstance(rule, IgnoreRule) and rule not in rules:
+                rules.append(rule)
+        return rules
 
     def _known_people(self) -> tuple[frozenset[str], frozenset[str]]:
         """Adresy i domeny firmowe z Twoich wysłanych maili (tylko odczyt lokalnej bazy)."""
@@ -817,6 +870,11 @@ class SettingsDialog(QDialog):
         if idx >= 0:
             self.cb_interval.setCurrentIndex(idx)
         self.cb_auto_vip.setCurrentIndex(max(self.cb_auto_vip.findData(self.config.auto_vip), 0))
+        self.list_ignore.clear()
+        for blocked in self.config.blocked_senders:
+            self._append_ignore_item(IgnoreRule(sender=blocked))
+        for rule in self.config.ignore_rules:
+            self._append_ignore_item(rule)
         idx = self.cb_voice_output.findData(self.config.voice_output)
         self.cb_voice_output.setCurrentIndex(max(idx, 0))
         if self.config.notify_mode == "ask":
@@ -1511,7 +1569,8 @@ class SettingsDialog(QDialog):
             analysis_prompt=self.txt_desc.toPlainText().strip(),
             vip_senders=vip_senders,
             keywords=keywords,
-            blocked_senders=self.config.blocked_senders,
+            blocked_senders=[],  # przeniesione do ignore_rules (to samo działanie)
+            ignore_rules=self._collect_ignore_rules(),
             interval_minutes=self.cb_interval.currentData() or 10,
             notify_mode="ask" if self.rb_ask.isChecked() else "beep",
             voice_output=self.cb_voice_output.currentData() or "auto",

@@ -280,6 +280,7 @@ def run_cycle(deps: PipelineDeps, check_backlog: bool = False) -> CycleResult:
             vip_senders=tuple(deps.config.vip_senders),
             keywords=tuple(deps.config.keywords),
             blocked_senders=tuple(deps.config.blocked_senders),
+            ignore_rules=tuple(deps.config.ignore_rules),
             sent_message_ids=sent_ids,
         )
 

@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
+from mailvoice.core.ignore import MAX_RULES, IgnoreRule
+
 
 @dataclass
 class AccountConfig:
@@ -40,6 +42,7 @@ class AppConfig:
     vip_senders: List[str] = field(default_factory=list)
     keywords: List[str] = field(default_factory=list)
     blocked_senders: List[str] = field(default_factory=list)
+    ignore_rules: List[IgnoreRule] = field(default_factory=list)  # nadawca/temat do ignorowania
     interval_minutes: int = 10
     notify_mode: str = "beep"  # 'beep' or 'ask'
     auto_vip: str = "bonus"  # osoby z Wysłanych: off | bonus | vip
@@ -63,6 +66,8 @@ class AppConfig:
                 result[key] = [account.__dict__ for account in value]
             elif key in ("ollama", "server"):
                 result[key] = value.__dict__
+            elif key == "ignore_rules":
+                result[key] = [{"sender": r.sender, "subject": r.subject} for r in value]
             else:
                 result[key] = value
         return result
@@ -142,6 +147,7 @@ class AppConfig:
             vip_senders=d.get("vip_senders", []),
             keywords=d.get("keywords", []),
             blocked_senders=d.get("blocked_senders", []),
+            ignore_rules=_parse_ignore_rules(d.get("ignore_rules", [])),
             interval_minutes=interval_minutes,
             notify_mode=notify_mode,
             voice_output=voice_output,
@@ -174,3 +180,18 @@ def load_config(path: Path) -> AppConfig:
     except FileNotFoundError:
         # Return default config if file doesn't exist
         return AppConfig(accounts=[])
+
+
+def _parse_ignore_rules(raw) -> list[IgnoreRule]:
+    """Odporny odczyt reguł ignorowania z JSON (zły wpis jest pomijany, nie psuje configu)."""
+    rules: list[IgnoreRule] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        rule = IgnoreRule(
+            sender=str(item.get("sender", "")).strip()[:200],
+            subject=str(item.get("subject", "")).strip()[:200],
+        )
+        if rule.is_valid() and rule not in rules:
+            rules.append(rule)
+    return rules[-MAX_RULES:]

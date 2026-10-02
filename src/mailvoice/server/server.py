@@ -6,6 +6,7 @@ import asyncio
 import logging
 import ssl
 import threading
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ class MobileServer:
         device_manager: DeviceManager,
         service: Any = None,
         data_dir: Path | None = None,
+        on_ignore: Callable[[Any], None] | None = None,
     ) -> None:
         self.config = config
         self.store = store
@@ -71,7 +73,13 @@ class MobileServer:
             store=self.store,
             device_manager=self.device_manager,
             service=self.service,
+            on_ignore=on_ignore,
         )
+
+    def update_config(self, config) -> None:
+        """Podmienia konfigurację (np. po zapisie ustawień lub dodaniu reguły ignorowania)."""
+        self.config = config
+        self.context.config = config
 
     @property
     def is_running(self) -> bool:

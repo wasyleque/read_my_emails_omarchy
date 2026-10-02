@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from email.utils import parseaddr
 from typing import FrozenSet, Optional, Tuple
 
+from mailvoice.core.ignore import IgnoreRule, is_ignored
+
 # Adresy automatyczne (nie ludzie): nigdy nie traktujemy ich jak znanych korespondentów.
 _AUTOMATED_PREFIXES = (
     "noreply",
@@ -72,6 +74,7 @@ class Rules:
     vip_senders: Tuple[str, ...] = ()
     keywords: Tuple[str, ...] = ()
     blocked_senders: Tuple[str, ...] = ()
+    ignore_rules: Tuple[IgnoreRule, ...] = ()
     sent_message_ids: FrozenSet[str] = frozenset()
     known_addresses: FrozenSet[str] = frozenset()  # adresy, do których Ty pisałeś
     known_domains: FrozenSet[str] = frozenset()  # domeny firmowe, do których Ty pisałeś
@@ -92,6 +95,10 @@ def evaluate(mail: MailInfo, rules: Rules) -> RuleResult:
     for blocked_sender in rules.blocked_senders:
         if blocked_sender.lower() in mail.sender.lower():
             return RuleResult(blocked=True, score_bonus=0, reasons=("blocked_sender",))
+
+    # Reguły „Ignoruj” (nadawca / domena / podobny temat): mail jest po cichu pomijany
+    if is_ignored(rules.ignore_rules, mail.sender, mail.subject):
+        return RuleResult(blocked=True, score_bonus=0, reasons=("ignored_rule",))
 
     score_bonus = 0
     known_bonus = 0

@@ -33,6 +33,7 @@ from mailvoice.core.contacts import ContactCard
 from mailvoice.core.devices import DeviceManager
 from mailvoice.core.digest import Digest, Topic
 from mailvoice.core.friendly_errors import format_friendly_error
+from mailvoice.core.ignore import IgnoreRule, add_ignore_rule, rule_for_mail
 from mailvoice.core.phishing import defang_url
 from mailvoice.core.pipeline import CycleResult, PendingBacklog, ProcessedMail
 from mailvoice.core.service import (
@@ -53,6 +54,7 @@ from mailvoice.core.voice_routing import computer_should_speak
 from mailvoice.server.server import MobileServer
 from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
+from mailvoice.ui.ignore_dialog import IgnoreDialog
 from mailvoice.ui.search_dialog import SearchDialog
 from mailvoice.ui.settings import SettingsDialog
 from mailvoice.voice.beeper import Beeper
@@ -120,6 +122,7 @@ class ServiceEventBridge(QObject):
     """Mostek przekazujący zdarzenia z serwisu do głównego wątku Qt za pomocą sygnałów."""
 
     new_event = Signal(object)
+    ignore_rule = Signal(object)  # żądanie ignorowania z telefonu (wątek serwera -> wątek GUI)
 
 
 class MainWindow(QMainWindow):
@@ -150,6 +153,7 @@ class MainWindow(QMainWindow):
 
         self.bridge = ServiceEventBridge()
         self.bridge.new_event.connect(self._handle_service_event)
+        self.bridge.ignore_rule.connect(self._apply_ignore_rule)
 
         if self.service:
             self.service.add_listener(self._on_service_event)
@@ -213,7 +217,7 @@ class MainWindow(QMainWindow):
         lbl_section.setStyleSheet("font-weight: bold; margin-top: 4px; margin-bottom: 4px;")
         msg_layout.addWidget(lbl_section)
 
-        self.tbl_mails = QTableWidget(0, 5)
+        self.tbl_mails = QTableWidget(0, 6)
         self.tbl_mails.setHorizontalHeaderLabels(
             [
                 tr("col_sender"),
@@ -221,6 +225,7 @@ class MainWindow(QMainWindow):
                 tr("col_reason"),
                 tr("col_account"),
                 tr("col_actions"),
+                tr("col_ignore"),
             ]
         )
         header = self.tbl_mails.horizontalHeader()
@@ -229,6 +234,7 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         if not self.service or len(self.service.config.accounts) <= 1:
             self.tbl_mails.setColumnHidden(3, True)
         self.tbl_mails.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -492,6 +498,35 @@ class MainWindow(QMainWindow):
         btn_listen.clicked.connect(lambda _, m=item: self._listen_to_mail(m))
         self.tbl_mails.setCellWidget(row, 4, btn_listen)
 
+        btn_ignore = QPushButton(tr("btn_ignore"))
+        btn_ignore.clicked.connect(lambda _, m=item: self._ignore_mail(m))
+        self.tbl_mails.setCellWidget(row, 5, btn_ignore)
+
+    def _ignore_mail(self, item: ProcessedMail) -> None:
+        """Pyta, co zignorować, i zapamiętuje regułę (nadawca / domena / podobny temat)."""
+        dialog = IgnoreDialog(item.mail.sender, item.mail.subject, self)
+        if dialog.exec() != IgnoreDialog.DialogCode.Accepted:
+            return
+        self._apply_ignore_rule(rule_for_mail(dialog.mode(), item.mail.sender, item.mail.subject))
+
+    def _apply_ignore_rule(self, rule: IgnoreRule) -> None:
+        """Dodaje regułę do konfiguracji (także z telefonu) i usuwa pasujące maile z listy."""
+        if not self.service:
+            return
+        self._on_config_updated(add_ignore_rule(self.service.config, rule))
+        removed = self._remove_ignored_rows(rule)
+        self.lbl_status.setText(tr("ignore_done", count=removed, rule=rule.describe()))
+
+    def _remove_ignored_rows(self, rule: IgnoreRule) -> int:
+        removed = 0
+        for index in range(len(self.important_items) - 1, -1, -1):
+            mail = self.important_items[index].mail
+            if rule.matches(mail.sender, mail.subject):
+                self.important_items.pop(index)
+                self.tbl_mails.removeRow(index)
+                removed += 1
+        return removed
+
     def _listen_to_mail(self, item: ProcessedMail) -> None:
         """Odtwarza streszczenie wybranego maila."""
         if not self.speaker:
@@ -566,6 +601,8 @@ class MainWindow(QMainWindow):
         if self.service:
             self.service.update_config(new_config)
             save_config(new_config, self.config_path)
+            if self.mobile_server is not None:
+                self.mobile_server.update_config(new_config)
             self._update_mobile_server()
             self.tbl_mails.setColumnHidden(3, len(new_config.accounts) <= 1)
             if not new_config.accounts:
@@ -593,6 +630,7 @@ class MainWindow(QMainWindow):
                     device_manager=self.device_manager,
                     service=self.service,
                     data_dir=self.data_dir,
+                    on_ignore=self.bridge.ignore_rule.emit,
                 )
                 self.service.add_listener(self.mobile_server.broadcast_event)
                 try:

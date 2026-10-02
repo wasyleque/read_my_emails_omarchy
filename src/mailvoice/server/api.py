@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
@@ -30,6 +31,12 @@ from mailvoice.core.devices import (
     PairingLockedError,
 )
 from mailvoice.core.digest import build_digest
+from mailvoice.core.ignore import (
+    IGNORE_MODES,
+    IgnoreRule,
+    is_ignored_by_config,
+    rule_for_mail,
+)
 from mailvoice.core.store import MailIndexRecord, Store
 from mailvoice.core.summarizer import filter_urls
 from mailvoice.voice.dialog import VoiceCommand, classify_command
@@ -45,7 +52,9 @@ class ServerContext:
     store: Store
     device_manager: DeviceManager
     service: Any = None  # MailService | None
-    server_key: bytes = field(default_factory=lambda: hashlib.sha256(b"mailvoice-key").digest())
+    on_ignore: Callable[[IgnoreRule], None] | None = None  # przekazanie do wątku GUI
+    # losowy klucz na każde uruchomienie serwera: identyfikatory maili są nieprzewidywalne
+    server_key: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     opaque_id_map: dict[str, tuple[str, str, int, int]] = field(default_factory=dict)
     event_queues: dict[web.WebSocketResponse, asyncio.Queue] = field(default_factory=dict)
     rate_limits: dict[str, list[float]] = field(default_factory=dict)
@@ -249,6 +258,7 @@ async def handle_important_mails(request: web.Request) -> web.Response:
         limit=limit,
     )
 
+    records = [r for r in records if not is_ignored_by_config(ctx.config, r.sender, r.subject)]
     items = [_format_mail_item(ctx, r) for r in records]
     return web.json_response({"mails": items})
 
@@ -285,6 +295,29 @@ async def handle_mail_summary(request: web.Request) -> web.Response:
             "summary": filter_urls(record.summary or ""),
         }
     )
+
+
+async def handle_mail_ignore(request: web.Request) -> web.Response:
+    """POST /v1/mails/{id}/ignore {mode} - Ignoruje podobne maile (similar | sender | domain)."""
+    ctx: ServerContext = request.app[CONTEXT_KEY]
+    target = ctx.opaque_id_map.get(request.match_info["id"])
+    if not target:
+        return web.json_response({"error": "Wiadomość nie znaleziona."}, status=404)
+    try:
+        body = await request.json()
+        mode = str(body.get("mode", "similar"))
+    except (ValueError, AttributeError):
+        return web.json_response({"error": "Niepoprawne żądanie."}, status=400)
+    if mode not in IGNORE_MODES:
+        return web.json_response({"error": "Nieznany tryb ignorowania."}, status=400)
+    if ctx.on_ignore is None:
+        return web.json_response({"error": "Ignorowanie jest niedostępne."}, status=503)
+    record = ctx.store.get_mail_index(*target)
+    if not record:
+        return web.json_response({"error": "Wiadomość nie znaleziona."}, status=404)
+    rule = rule_for_mail(mode, record.sender, record.subject)
+    ctx.on_ignore(rule)
+    return web.json_response({"status": "ok", "mode": mode, "rule": rule.describe()})
 
 
 async def handle_mail_ack(request: web.Request) -> web.Response:
@@ -487,6 +520,7 @@ def create_app(context: ServerContext) -> web.Application:
     app.router.add_get("/v1/mails/important", handle_important_mails)
     app.router.add_get("/v1/mails/{id}/summary", handle_mail_summary)
     app.router.add_post("/v1/mails/{id}/ack", handle_mail_ack)
+    app.router.add_post("/v1/mails/{id}/ignore", handle_mail_ignore)
     app.router.add_get("/v1/digest", handle_digest)
     app.router.add_post("/v1/voice/command", handle_voice_command)
     app.router.add_delete("/v1/devices/self", handle_disconnect_self)
