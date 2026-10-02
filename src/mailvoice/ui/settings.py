@@ -453,6 +453,19 @@ class SettingsDialog(QDialog):
         self.bg_mode.addButton(self.rb_ask)
         layout.addWidget(self.rb_beep)
         layout.addWidget(self.rb_ask)
+        layout.addSpacing(10)
+
+        layout.addWidget(QLabel(tr("voice_output_label")))
+        self.cb_voice_output = QComboBox()
+        self.cb_voice_output.addItem(tr("voice_output_auto"), "auto")
+        self.cb_voice_output.addItem(tr("voice_output_computer"), "computer")
+        self.cb_voice_output.addItem(tr("voice_output_phone"), "phone")
+        self.cb_voice_output.addItem(tr("voice_output_both"), "both")
+        layout.addWidget(self.cb_voice_output)
+        lbl_out_hint = QLabel(tr("voice_output_hint"))
+        lbl_out_hint.setWordWrap(True)
+        lbl_out_hint.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+        layout.addWidget(lbl_out_hint)
         layout.addSpacing(15)
 
         self.btn_test_voice = QPushButton(tr("step5_test_voice_btn"))
@@ -752,6 +765,8 @@ class SettingsDialog(QDialog):
         idx = self.cb_interval.findData(self.config.interval_minutes)
         if idx >= 0:
             self.cb_interval.setCurrentIndex(idx)
+        idx = self.cb_voice_output.findData(self.config.voice_output)
+        self.cb_voice_output.setCurrentIndex(max(idx, 0))
         if self.config.notify_mode == "ask":
             self.rb_ask.setChecked(True)
         else:
@@ -1447,6 +1462,7 @@ class SettingsDialog(QDialog):
             blocked_senders=self.config.blocked_senders,
             interval_minutes=self.cb_interval.currentData() or 10,
             notify_mode="ask" if self.rb_ask.isChecked() else "beep",
+            voice_output=self.cb_voice_output.currentData() or "auto",
             beep_repeat_minutes=self.config.beep_repeat_minutes,
             ask_retry_minutes=self.config.ask_retry_minutes,
             importance_threshold=self.slider.value(),

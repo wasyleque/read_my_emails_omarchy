@@ -63,6 +63,15 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Szczegóły: {detail}"
         ),
         "mobile_server_start_failed": "Nie udało się uruchomić połączenia z telefonem. ({detail})",
+        "voice_output_label": "Gdzie odtwarzać powiadomienia głosowe:",
+        "voice_output_auto": "Automatycznie (telefon, gdy jest połączony, inaczej komputer)",
+        "voice_output_computer": "Tylko na komputerze",
+        "voice_output_phone": "Tylko na telefonie (komputer milczy)",
+        "voice_output_both": "Na komputerze i na telefonie",
+        "voice_output_hint": (
+            "Dotyczy powiadomień wysyłanych przez program (nowy ważny mail, przypomnienia). "
+            "Gdy sam klikniesz „Posłuchaj” na komputerze, zawsze usłyszysz go na komputerze."
+        ),
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -323,6 +332,15 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Click “Save changes” to start it, then try again.\n\nDetails: {detail}"
         ),
         "mobile_server_start_failed": "Could not start the phone connection. ({detail})",
+        "voice_output_label": "Where to play voice notifications:",
+        "voice_output_auto": "Automatic (phone when connected, otherwise computer)",
+        "voice_output_computer": "Computer only",
+        "voice_output_phone": "Phone only (computer stays silent)",
+        "voice_output_both": "Computer and phone",
+        "voice_output_hint": (
+            "Applies to notifications sent by the program (new important mail, reminders). "
+            "When you click “Listen” on the computer yourself, you always hear it on the computer."
+        ),
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),

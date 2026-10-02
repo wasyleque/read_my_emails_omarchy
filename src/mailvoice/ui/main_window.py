@@ -49,6 +49,7 @@ from mailvoice.core.service import (
     SuspiciousMail,
 )
 from mailvoice.core.summarizer import summarize
+from mailvoice.core.voice_routing import computer_should_speak
 from mailvoice.server.server import MobileServer
 from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
@@ -627,17 +628,23 @@ class MainWindow(QMainWindow):
         """Odbiera zdarzenie z wątku serwisu i emituje sygnał do GUI."""
         self.bridge.new_event.emit(event)
 
+    def _computer_should_speak(self) -> bool:
+        """Czy komputer ma teraz czytać zdarzenia systemowe (zależnie od ustawienia i telefonu)."""
+        phones = self.mobile_server.connected_phones() if self.mobile_server else 0
+        mode = self.service.config.voice_output if self.service else "auto"
+        return computer_should_speak(mode, phones)
+
     def _handle_service_event(self, event: Event) -> None:
         """Obsługa zdarzeń serwisu w głównym wątku Qt."""
         if isinstance(event, NewImportant):
             for item in event.items:
                 self._add_important_mail(item)
-            if self.voice_dialog and not self._is_muted:
+            if self.voice_dialog and not self._is_muted and self._computer_should_speak():
                 self.voice_dialog.handle_event(event)
 
         elif isinstance(event, SuspiciousMail):
             self._add_important_mail(event.mail)
-            if self.voice_dialog and not self._is_muted:
+            if self.voice_dialog and not self._is_muted and self._computer_should_speak():
                 self.voice_dialog.handle_event(event)
 
         elif isinstance(event, BacklogQuestion):
@@ -645,9 +652,11 @@ class MainWindow(QMainWindow):
                 self._ask_backlog(event.items, event.count)
 
         elif isinstance(event, (BeepReminder, AskReminder)):
-            if self.voice_dialog and not self._is_muted:
+            if self._is_muted or not self._computer_should_speak():
+                pass  # wyciszone albo czyta telefon (ustawienie „Gdzie odtwarzać”)
+            elif self.voice_dialog:
                 self.voice_dialog.handle_event(event)
-            elif isinstance(event, BeepReminder) and self.beeper and not self._is_muted:
+            elif isinstance(event, BeepReminder) and self.beeper:
                 self.beeper.beep()
 
         elif isinstance(event, ServiceError):

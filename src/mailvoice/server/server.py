@@ -172,6 +172,10 @@ class MobileServer:
             self._thread = None
         self._loop = None
 
+    def connected_phones(self) -> int:
+        """Liczba telefonów z aktywnym połączeniem WebSocket (bezpieczne do odczytu z wątku GUI)."""
+        return len(self.context.event_queues)
+
     def broadcast_event(self, event: Event) -> None:
         """Bezpiecznie przekazuje zdarzenie z wątku MailService do połączonych telefonów."""
         if not self._is_running or not self._loop or self._loop.is_closed():
