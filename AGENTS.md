@@ -136,7 +136,7 @@ ochrona przed prompt injection, `core/phishing.py`, test statyczny). Repo public
 2. `python tools/smoke_test.py --days 7` — wypisuje tylko liczby; wynik można wkleić do rozmowy (bez danych osobistych).
 3. Zweryfikować NA PRAWDZIWYM serwerze: parser BODYSTRUCTURE w `imap_fetch.py` (testowany tylko na fake'ach — serwery różnie
    formatują odpowiedź), nazwa folderu Wysłane (O2: „Wysłane”), dowód read-only (flagi nietknięte).
-4. Ollama: serwer jest w pracy (LAN `192.168.0.11` — w repo zamienione na 192.168.1.50; ustaw w Ustawieniach). Z domu tylko VPN.
+4. Ollama: serwer może być w sieci LAN (adres ustaw w Ustawieniach; w repo tylko przykładowy 192.168.1.50). Z domu zwykle przez VPN.
 
 **Następna partia gotowa do wysłania agy:** `logs/agy_batch7_prompt.md` (auto-discovery Ollamy w sieci + zewnętrzni dostawcy AI,
 opt-in; zasady w SECURITY.md). Wysłanie: `herdr agent prompt <pane agy> "Przeczytaj .../logs/agy_batch7_prompt.md i wykonaj..."`.
