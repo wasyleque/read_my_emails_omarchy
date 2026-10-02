@@ -128,3 +128,32 @@ async def test_server_digest_returns_open_matters_with_counts_and_does_not_emit(
         assert len(service.calls) == 1  # kolejne zapytania z pamięci podręcznej (bez liczenia)
     finally:
         await client.close()
+
+
+def test_phone_digest_path_uses_a_short_per_call_timeout(tmp_path, monkeypatch):
+    """Regresja: budżet ograniczał liczbę wywołań modelu, ale jedno zawieszone czekało 60 s."""
+    from mailvoice.core import service as service_mod
+    from mailvoice.core.analyzer import OllamaClient
+    from mailvoice.core.config import OllamaConfig
+    from mailvoice.core.service import MailService
+
+    seen = {}
+
+    def fake_build(store, client, config, **kwargs):
+        seen["timeout"] = client.cfg.timeout_s
+        seen["budget"] = kwargs["llm_budget"]
+        return Digest(period="p", topics=[])
+
+    monkeypatch.setattr(service_mod, "build_digest", fake_build)
+    cfg = AppConfig()
+    svc = MailService.__new__(MailService)  # bez sieci i bez sejfu: testujemy tylko request_digest
+    svc.config = cfg
+    svc.store = Store(tmp_path / "s.db")
+    svc.ollama_client = OllamaClient(OllamaConfig(timeout_s=120.0))
+    svc._clock = lambda: datetime.now(timezone.utc)
+    svc._emit = lambda event: None
+
+    svc.request_digest(days=30, emit=False, llm_budget=3, llm_timeout_s=6.0)
+    assert seen == {"timeout": 6.0, "budget": 3}
+    svc.request_digest(days=30)  # zwykłe wywołanie (okno na komputerze) zachowuje długi limit
+    assert seen["timeout"] == 120.0

@@ -385,7 +385,9 @@ _DIGEST_TTL_S = 120.0
 def _compute_digest(ctx: ServerContext, days: int):
     """Liczy podsumowanie w wątku roboczym; krótki budżet modelu = szybka odpowiedź dla telefonu."""
     if ctx.service and hasattr(ctx.service, "request_digest"):
-        return ctx.service.request_digest(days=days, emit=False, llm_budget=3, llm_deadline_s=8.0)
+        return ctx.service.request_digest(
+            days=days, emit=False, llm_budget=3, llm_deadline_s=8.0, llm_timeout_s=6.0
+        )
     from mailvoice.core.analyzer import OllamaClient
 
     client = getattr(ctx.service, "ollama_client", None) or OllamaClient(ctx.config.ollama)

@@ -1,5 +1,6 @@
 """Warstwa usługowa aplikacji MailVoice (Service) - pętla sterująca bez Qt i audio."""
 
+import dataclasses
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -290,6 +291,7 @@ class MailService:
         emit: bool = True,
         llm_budget: int = 30,
         llm_deadline_s: float = 90.0,
+        llm_timeout_s: float | None = None,
     ) -> Digest:
         """Generuje podsumowanie wątków za podaną liczbę dni (lub domyślnie z configu).
 
@@ -300,9 +302,15 @@ class MailService:
         effective_days = days if (days is not None and days >= 1) else self.config.digest_days
         now = self._clock()
         since_dt = now - timedelta(days=effective_days)
+        client = self.ollama_client
+        if llm_timeout_s:  # krótki limit pojedynczego wywołania (np. odpowiedź dla telefonu)
+            client = OllamaClient(
+                dataclasses.replace(client.cfg, timeout_s=llm_timeout_s),
+                transport=getattr(client, "transport", None),
+            )
         digest = build_digest(
             store=self.store,
-            client=self.ollama_client,
+            client=client,
             config=self.config,
             since=since_dt,
             until=now,
