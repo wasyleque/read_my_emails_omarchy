@@ -282,4 +282,100 @@ class MailApiTest {
         assertTrue(error.isSecurityAlert)
         assertTrue(error.message.contains("Certyfikat komputera się zmienił"))
     }
+
+    @Test
+    fun testIgnoreMailSuccess() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"status":"ok","mode":"similar","rule":"Nadawca info@sklep.pl i podobny temat"}""")
+        )
+
+        val result = api.ignoreMail("m123", mode = "similar")
+
+        assertTrue(result is ApiResult.Success)
+        val data = (result as ApiResult.Success).data
+        assertEquals("ok", data.status)
+        assertEquals("similar", data.mode)
+        assertEquals("Nadawca info@sklep.pl i podobny temat", data.rule)
+
+        val request = server.takeRequest()
+        assertEquals("/v1/mails/m123/ignore", request.path)
+        assertEquals("POST", request.method)
+        assertEquals("Bearer test_bearer_token", request.getHeader("Authorization"))
+        val bodyStr = request.body.readUtf8()
+        assertTrue(bodyStr.contains("\"mode\":\"similar\""))
+    }
+
+    @Test
+    fun testIgnoreMail400BadRequest() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(400)
+                .setBody("""{"error":"Nieznany tryb ignorowania."}""")
+        )
+
+        val result = api.ignoreMail("m123", mode = "invalid_mode")
+
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertEquals(400, error.httpCode)
+        assertTrue(error.message.contains("Nieznany tryb ignorowania"))
+    }
+
+    @Test
+    fun testIgnoreMail404NotFound() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(404)
+                .setBody("""{"error":"Wiadomość nie znaleziona."}""")
+        )
+
+        val result = api.ignoreMail("nonexistent", mode = "sender")
+
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertEquals(404, error.httpCode)
+        assertTrue(error.message.contains("Wiadomość nie znaleziona"))
+    }
+
+    @Test
+    fun testIgnoreMail503ServiceUnavailable() = runTest(testDispatcher) {
+        val api = createApi()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(503)
+                .setBody("""{"error":"Ignorowanie jest niedostępne."}""")
+        )
+
+        val result = api.ignoreMail("m123", mode = "domain")
+
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertEquals(503, error.httpCode)
+        assertTrue(error.message.contains("Ignorowanie jest niedostępne"))
+    }
+
+    @Test
+    fun testIgnoreMail401Unauthorized() = runTest(testDispatcher) {
+        val api = createApi()
+        assertTrue(tokenStore.isPaired())
+
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(401)
+                .setBody("""{"error":"Brak autoryzacji"}""")
+        )
+
+        val result = api.ignoreMail("m123", mode = "similar")
+
+        assertTrue(result is ApiResult.Error)
+        val error = result as ApiResult.Error
+        assertTrue(error.isUnauthorized)
+        assertEquals(401, error.httpCode)
+        assertFalse("TokenStore musi zostać wyczyszczony przy 401", tokenStore.isPaired())
+    }
 }

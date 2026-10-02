@@ -46,6 +46,7 @@ import io.github.wasyleque.mailvoice.security.KeystoreTokenStore
 import io.github.wasyleque.mailvoice.ui.ConnectingScreen
 import io.github.wasyleque.mailvoice.ui.DigestScreen
 import io.github.wasyleque.mailvoice.ui.DigestViewModel
+import io.github.wasyleque.mailvoice.ui.IgnoreMailDialog
 import io.github.wasyleque.mailvoice.ui.MailDetailScreen
 import io.github.wasyleque.mailvoice.ui.MailsListScreen
 import io.github.wasyleque.mailvoice.ui.MailsViewModel
@@ -286,13 +287,25 @@ fun PairedAppMain(
     }
 
     val selectedMail by mailsViewModel.selectedMail.collectAsState()
+    val ignoreTarget by mailsViewModel.ignoreDialogTarget.collectAsState()
+    val isIgnoring by mailsViewModel.isIgnoring.collectAsState()
+    val ignoreError by mailsViewModel.ignoreErrorMessage.collectAsState()
+    val userMessage by mailsViewModel.userMessage.collectAsState()
+
+    LaunchedEffect(userMessage) {
+        userMessage?.let { msg ->
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            mailsViewModel.clearUserMessage()
+        }
+    }
 
     if (selectedMail != null) {
         MailDetailScreen(
             mail = selectedMail!!,
             onBack = { mailsViewModel.clearSelectedMail() },
             onListenClicked = { mail -> mailsViewModel.startVoiceSession(listOf(mail)) },
-            onAckClicked = { mailId -> mailsViewModel.ackMail(mailId) }
+            onAckClicked = { mailId -> mailsViewModel.ackMail(mailId) },
+            onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) }
         )
     } else {
         Scaffold(
@@ -348,7 +361,8 @@ fun PairedAppMain(
                             isLoading = isLoading,
                             onRefresh = { mailsViewModel.loadMails() },
                             onMailClicked = { mail -> mailsViewModel.selectMail(mail) },
-                            onStartVoiceSession = { mailsViewModel.startVoiceSession() }
+                            onStartVoiceSession = { mailsViewModel.startVoiceSession() },
+                            onIgnoreClicked = { mail -> mailsViewModel.openIgnoreDialog(mail) }
                         )
                     }
                     1 -> {
@@ -434,6 +448,17 @@ fun PairedAppMain(
                     Text(stringResource(R.string.btn_cancel))
                 }
             }
+        )
+    }
+
+    // Dialog ignorowania wiadomości
+    if (ignoreTarget != null) {
+        IgnoreMailDialog(
+            mail = ignoreTarget!!,
+            isSubmitting = isIgnoring,
+            errorMessage = ignoreError,
+            onDismiss = { mailsViewModel.dismissIgnoreDialog() },
+            onConfirm = { mode -> mailsViewModel.confirmIgnore(mode) }
         )
     }
 }

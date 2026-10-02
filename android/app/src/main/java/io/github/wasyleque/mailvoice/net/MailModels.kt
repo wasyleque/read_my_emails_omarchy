@@ -35,6 +35,32 @@ data class AckResult(
 )
 
 /**
+ * Wynik zignorowania wiadomości z POST /v1/mails/{id}/ignore.
+ */
+data class IgnoreResult(
+    val status: String,
+    val mode: String,
+    val rule: String
+)
+
+/**
+ * Dostępne tryby ignorowania wiadomości.
+ */
+enum class IgnoreMode(val apiValue: String) {
+    SIMILAR("similar"),
+    SENDER("sender"),
+    DOMAIN("domain");
+
+    companion object {
+        fun fromApiValue(value: String): IgnoreMode = when (value.lowercase()) {
+            "sender" -> SENDER
+            "domain" -> DOMAIN
+            else -> SIMILAR
+        }
+    }
+}
+
+/**
  * Pojedyncza sprawa / temat w podsumowaniu GET /v1/digest.
  */
 data class DigestTopic(

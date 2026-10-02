@@ -70,9 +70,20 @@
     <string name="suspicious_warning_desc">Wiadomość została zaklasyfikowana jako podejrzana (próba wyłudzenia danych lub złośliwy link). Ze względów bezpieczeństwa treść oraz odnośniki zostały całkowicie zablokowane.</string>
     <string name="btn_listen">Posłuchaj streszczenia</string>
     <string name="btn_ack">Oznacz jako wysłuchane</string>
+    <string name="btn_ignore">Ignoruj…</string>
     <string name="summary_label">Streszczenie wiadomości:</string>
     <string name="sender_label">Od: %1$s</string>
     <string name="date_label">Data: %1$s</string>
+
+    <!-- Ignorowanie wiadomości -->
+    <string name="ignore_dialog_title">Ignoruj wiadomości</string>
+    <string name="ignore_dialog_desc">Wybierz, które wiadomości program MailVoice ma w przyszłości ignorować. Komputer zapamięta tę regułę (można ją zmienić lub usunąć w Ustawieniach na komputerze):</string>
+    <string name="ignore_mode_similar">Podobne maile od tego nadawcy (ten sam temat)</string>
+    <string name="ignore_mode_sender">Wszystkie maile od tego nadawcy</string>
+    <string name="ignore_mode_domain">Wszystkie maile z tej domeny (całej firmy)</string>
+    <string name="btn_confirm_ignore">Ignoruj</string>
+    <string name="status_ignoring">Zapisywanie reguły ignorowania...</string>
+    <string name="msg_mail_ignored">Zignorowano</string>
 
     <!-- Podsumowanie tematów (Digest) -->
     <string name="digest_week">Tydzień (7 dni)</string>

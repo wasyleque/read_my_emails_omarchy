@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -47,7 +49,8 @@ fun MailsListScreen(
     isLoading: Boolean,
     onRefresh: () -> Unit,
     onMailClicked: (ImportantMail) -> Unit,
-    onStartVoiceSession: () -> Unit
+    onStartVoiceSession: () -> Unit,
+    onIgnoreClicked: (ImportantMail) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -142,7 +145,11 @@ fun MailsListScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(mails, key = { it.id }) { mail ->
-                    MailItemCard(mail = mail, onClick = { onMailClicked(mail) })
+                    MailItemCard(
+                        mail = mail,
+                        onClick = { onMailClicked(mail) },
+                        onIgnoreClicked = { onIgnoreClicked(mail) }
+                    )
                 }
             }
         }
@@ -152,7 +159,8 @@ fun MailsListScreen(
 @Composable
 private fun MailItemCard(
     mail: ImportantMail,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onIgnoreClicked: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -250,6 +258,24 @@ private fun MailItemCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // Wiersz 5: Akcja ignorowania
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onIgnoreClicked,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.btn_ignore),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }

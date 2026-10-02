@@ -94,6 +94,30 @@ class MailApi(
     }
 
     /**
+     * Ignoruje wiadomość i dodaje regułę na komputerze (POST /v1/mails/{id}/ignore).
+     * @param mailId identyfikator wiadomości (24 znaki hex HMAC)
+     * @param mode tryb ignorowania ("similar" | "sender" | "domain")
+     */
+    suspend fun ignoreMail(mailId: String, mode: String = "similar"): ApiResult<IgnoreResult> {
+        val jsonPayload = JSONObject().apply {
+            put("mode", mode)
+        }.toString()
+        val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        return executeRequest(
+            endpoint = "/v1/mails/$mailId/ignore",
+            builder = Request.Builder().post(body)
+        ) { bodyString ->
+            val json = JSONObject(bodyString)
+            IgnoreResult(
+                status = json.optString("status", "ok"),
+                mode = json.optString("mode", mode),
+                rule = json.optString("rule", "")
+            )
+        }
+    }
+
+    /**
      * Pobiera podsumowanie tematów (GET /v1/digest?days=...).
      */
     suspend fun getDigest(days: Int = 30): ApiResult<TopicDigest> =
@@ -223,6 +247,13 @@ class MailApi(
                             ApiResult.Error("Błędny format danych odebranych z serwera: ${e.localizedMessage ?: "błąd parsowania"}")
                         }
                     }
+                    400 -> {
+                        val errorDetail = parseErrorMessage(response.body?.string())
+                        ApiResult.Error(
+                            message = errorDetail ?: "Niepoprawne żądanie (kod 400).",
+                            httpCode = 400
+                        )
+                    }
                     401 -> {
                         tokenStore.clear()
                         ApiResult.Error(
@@ -231,11 +262,36 @@ class MailApi(
                             httpCode = 401
                         )
                     }
-                    403 -> ApiResult.Error("Brak uprawnień do wykonania operacji (kod 403).", httpCode = 403)
-                    404 -> ApiResult.Error("Żądany zasób nie został odnaleziony na serwerze (kod 404).", httpCode = 404)
+                    403 -> {
+                        val errorDetail = parseErrorMessage(response.body?.string())
+                        ApiResult.Error(
+                            message = errorDetail ?: "Brak uprawnień do wykonania operacji (kod 403).",
+                            httpCode = 403
+                        )
+                    }
+                    404 -> {
+                        val errorDetail = parseErrorMessage(response.body?.string())
+                        ApiResult.Error(
+                            message = errorDetail ?: "Wiadomość nie została odnaleziona na komputerze (kod 404).",
+                            httpCode = 404
+                        )
+                    }
                     429 -> ApiResult.Error("Zbyt wiele zapytań do serwera. Odczekaj chwilę.", httpCode = 429)
                     500 -> ApiResult.Error("Wewnętrzny błąd programu MailVoice na komputerze.", httpCode = 500)
-                    else -> ApiResult.Error("Serwer zwrócił nieoczekiwany kod błędu (${response.code}).", httpCode = response.code)
+                    503 -> {
+                        val errorDetail = parseErrorMessage(response.body?.string())
+                        ApiResult.Error(
+                            message = errorDetail ?: "Funkcja ignorowania jest obecnie niedostępna na komputerze (kod 503).",
+                            httpCode = 503
+                        )
+                    }
+                    else -> {
+                        val errorDetail = parseErrorMessage(response.body?.string())
+                        ApiResult.Error(
+                            message = errorDetail ?: "Serwer zwrócił nieoczekiwany kod błędu (${response.code}).",
+                            httpCode = response.code
+                        )
+                    }
                 }
             }
         } catch (e: SSLHandshakeException) {
@@ -268,6 +324,19 @@ class MailApi(
                 message = "Błąd połączenia z komputerem: ${e.localizedMessage ?: "brak szczegółów"}",
                 isNetworkError = true
             )
+        }
+    }
+
+    private fun parseErrorMessage(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        return try {
+            val json = JSONObject(body)
+            val error = json.optString("error").ifBlank {
+                json.optString("detail").ifBlank { null }
+            }
+            error
+        } catch (_: Exception) {
+            null
         }
     }
 }

@@ -1,5 +1,6 @@
 package io.github.wasyleque.mailvoice.ui
 
+import io.github.wasyleque.mailvoice.net.IgnoreMode
 import io.github.wasyleque.mailvoice.net.ImportantMail
 import io.github.wasyleque.mailvoice.net.MailApi
 import io.github.wasyleque.mailvoice.net.PinnedTlsClient
@@ -199,5 +200,210 @@ class MailsViewModelTest {
 
         viewModel.stopVoiceSession()
         assertFalse(viewModel.isVoiceSessionActive.value)
+    }
+
+    @Test
+    fun testOpenAndDismissIgnoreDialog() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+
+        val mail = ImportantMail(
+            id = "m1",
+            sender = "Jan",
+            subject = "Temat",
+            importance = 5,
+            why = "P",
+            summary = "S",
+            suspicious = false,
+            date = "d",
+            acknowledged = false
+        )
+
+        assertNull(viewModel.ignoreDialogTarget.value)
+        viewModel.openIgnoreDialog(mail)
+        assertEquals("m1", viewModel.ignoreDialogTarget.value?.id)
+        assertNull(viewModel.ignoreErrorMessage.value)
+
+        viewModel.dismissIgnoreDialog()
+        assertNull(viewModel.ignoreDialogTarget.value)
+    }
+
+    @Test
+    fun testConfirmIgnoreSuccessRemovesMailAndRefreshes() = runTest(testDispatcher) {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "mails": [
+                    {
+                      "id": "m1",
+                      "sender": "Jan",
+                      "subject": "Temat 1",
+                      "importance": 5,
+                      "why": "P",
+                      "summary": "S",
+                      "suspicious": false,
+                      "date": "d",
+                      "acknowledged": false
+                    },
+                    {
+                      "id": "m2",
+                      "sender": "Adam",
+                      "subject": "Temat 2",
+                      "importance": 6,
+                      "why": "P",
+                      "summary": "S",
+                      "suspicious": false,
+                      "date": "d",
+                      "acknowledged": false
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+        server.takeRequest() // konsumujemy początkowe GET /v1/mails/important
+
+        assertEquals(2, viewModel.mails.value.size)
+        val mail1 = viewModel.mails.value[0]
+        viewModel.selectMail(mail1)
+        assertEquals("m1", viewModel.selectedMail.value?.id)
+
+        // Otwórz dialog ignorowania
+        viewModel.openIgnoreDialog(mail1)
+        assertEquals("m1", viewModel.ignoreDialogTarget.value?.id)
+
+        // Odpowiedź na ignoreMail i odpowiedź na odświeżenie loadMails
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"status":"ok","mode":"similar","rule":"Jan"}"""
+            )
+        )
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "mails": [
+                    {
+                      "id": "m2",
+                      "sender": "Adam",
+                      "subject": "Temat 2",
+                      "importance": 6,
+                      "why": "P",
+                      "summary": "S",
+                      "suspicious": false,
+                      "date": "d",
+                      "acknowledged": false
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+
+        viewModel.confirmIgnore(IgnoreMode.SIMILAR)
+        advanceUntilIdle()
+
+        // Żądanie ignore
+        val ignoreReq = server.takeRequest()
+        assertEquals("/v1/mails/m1/ignore", ignoreReq.path)
+        assertEquals("POST", ignoreReq.method)
+        assertTrue(ignoreReq.body.readUtf8().contains("\"mode\":\"similar\""))
+
+        // Żądanie refresh
+        val refreshReq = server.takeRequest()
+        assertEquals("/v1/mails/important?limit=30", refreshReq.path)
+
+        // Stan po sukcesie
+        assertFalse(viewModel.isIgnoring.value)
+        assertNull(viewModel.ignoreDialogTarget.value)
+        assertNull(viewModel.selectedMail.value) // m1 był wybrany, więc został wyczyszczony
+        assertEquals("Zignorowano", viewModel.userMessage.value)
+        assertEquals(1, viewModel.mails.value.size)
+        assertEquals("m2", viewModel.mails.value[0].id)
+
+        viewModel.clearUserMessage()
+        assertNull(viewModel.userMessage.value)
+    }
+
+    @Test
+    fun testConfirmIgnoreErrorPreservesDialogStateForRetry() = runTest(testDispatcher) {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "mails": [
+                    {
+                      "id": "m1",
+                      "sender": "Jan",
+                      "subject": "Temat 1",
+                      "importance": 5,
+                      "why": "P",
+                      "summary": "S",
+                      "suspicious": false,
+                      "date": "d",
+                      "acknowledged": false
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+        server.takeRequest()
+
+        val mail1 = viewModel.mails.value[0]
+        viewModel.openIgnoreDialog(mail1)
+
+        server.enqueue(
+            MockResponse().setResponseCode(400).setBody(
+                """{"error":"Niepoprawny tryb ignorowania"}"""
+            )
+        )
+
+        viewModel.confirmIgnore(IgnoreMode.SIMILAR)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.isIgnoring.value)
+        assertEquals("Niepoprawny tryb ignorowania", viewModel.ignoreErrorMessage.value)
+        assertNotNull(viewModel.ignoreDialogTarget.value) // nadal otwarty do ponowienia
+        assertEquals(1, viewModel.mails.value.size)
+    }
+
+    @Test
+    fun testConfirmIgnoreUnauthorizedMarksUnauthorized() = runTest(testDispatcher) {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"mails":[]}"""))
+        val viewModel = MailsViewModel(mailApi)
+        advanceUntilIdle()
+        server.takeRequest()
+
+        val mail = ImportantMail(
+            id = "m1",
+            sender = "Jan",
+            subject = "Temat",
+            importance = 5,
+            why = "P",
+            summary = "S",
+            suspicious = false,
+            date = "d",
+            acknowledged = false
+        )
+        viewModel.openIgnoreDialog(mail)
+
+        server.enqueue(
+            MockResponse().setResponseCode(401).setBody(
+                """{"error":"Brak autoryzacji"}"""
+            )
+        )
+
+        viewModel.confirmIgnore(IgnoreMode.SIMILAR)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.isIgnoring.value)
+        assertTrue(viewModel.isUnauthorized.value)
     }
 }

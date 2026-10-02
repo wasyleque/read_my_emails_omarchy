@@ -83,3 +83,20 @@ Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
   - Słuchanie opiera się na `SpeechRecognizer` (z preferencją trybu on-device od API 31+). Aplikacja nie wymaga Usług Google Play i oferuje pełne przyciski dotykowe jako alternatywę w głośnym otoczeniu.
   - Uprawnienie `RECORD_AUDIO` jest żądane z wyjaśnieniem wyłącznie przy pierwszym użyciu mikrofonu.
   - Widoczność pakietów na Androidzie 11+ jest zadeklarowana w `<queries>` dla `android.speech.RecognitionService` oraz `android.intent.action.TTS_SERVICE`.
+
+---
+
+## 5. Ignorowanie wiadomości i reguły (B3: Przycisk „Ignoruj…”)
+
+- **Integracja API (`POST /v1/mails/{id}/ignore`)**:
+  - Obsługa trzech trybów ignorowania:
+    1. `similar` (domyślny) — podobne maile od tego samego nadawcy (ten sam temat bazowy).
+    2. `sender` — wszystkie maile od danego nadawcy.
+    3. `domain` — wszystkie maile z danej domeny (całej organizacji).
+  - Model odpowiedzi: `status`, `mode`, `rule`.
+- **Interfejs użytkownika (UX „dla opornych”)**:
+  - Dedykowany przycisk „Ignoruj…” dostępny na każdej karcie maila na liście oraz na ekranie szczegółów.
+  - Przycisk jest w pełni dostępny również dla maili podejrzanych (`suspicious == true`), stanowiąc zalecaną, bezpieczną reakcję na próby wyłudzenia danych.
+  - Okno dialogowe (`IgnoreMailDialog`) z trzema opcjami wyboru (Radio), podglądem nadawcy i tematu, blokadą ponownych kliknięć podczas wysyłania żądania oraz czytelnym wyjaśnieniem, że komputer zapamiętuje regułę i można ją edytować/usunąć w Ustawieniach na komputerze.
+  - Po zatwierdzeniu: natychmiastowe usunięcie pozycji z lokalnego widoku, powiadomienie „Zignorowano” (Toast) oraz automatyczne odświeżenie listy z serwera w celu zsynchronizowania innych wiadomości objętych nowo utworzoną regułą.
+  - Przyjazna obsługa błędów (400, 404, 503, brak sieci) w języku polskim z możliwością natychmiastowego ponowienia próby, a przy błędzie autoryzacji (401) automatyczny powrót do ekranu parowania.

@@ -70,9 +70,20 @@
     <string name="suspicious_warning_desc">This email has been classified as suspicious (phishing attempt or malicious link). Email body and links have been completely blocked for your security.</string>
     <string name="btn_listen">Listen to summary</string>
     <string name="btn_ack">Mark as listened</string>
+    <string name="btn_ignore">Ignore…</string>
     <string name="summary_label">Email summary:</string>
     <string name="sender_label">From: %1$s</string>
     <string name="date_label">Date: %1$s</string>
+
+    <!-- Ignore emails -->
+    <string name="ignore_dialog_title">Ignore emails</string>
+    <string name="ignore_dialog_desc">Choose which emails MailVoice should ignore in the future. The computer will remember this rule (you can manage or remove it in Settings on your computer):</string>
+    <string name="ignore_mode_similar">Similar emails from this sender (same subject)</string>
+    <string name="ignore_mode_sender">All emails from this sender</string>
+    <string name="ignore_mode_domain">All emails from this domain (entire organization)</string>
+    <string name="btn_confirm_ignore">Ignore</string>
+    <string name="status_ignoring">Saving ignore rule...</string>
+    <string name="msg_mail_ignored">Ignored</string>
 
     <!-- Digest -->
     <string name="digest_week">Week (7 days)</string>

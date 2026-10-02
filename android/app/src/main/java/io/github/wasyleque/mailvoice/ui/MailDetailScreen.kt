@@ -40,7 +40,8 @@ fun MailDetailScreen(
     mail: ImportantMail,
     onBack: () -> Unit,
     onListenClicked: (ImportantMail) -> Unit,
-    onAckClicked: (String) -> Unit
+    onAckClicked: (String) -> Unit,
+    onIgnoreClicked: (ImportantMail) -> Unit
 ) {
     val scrollState = rememberScrollState()
 
@@ -185,6 +186,19 @@ fun MailDetailScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            OutlinedButton(
+                onClick = { onIgnoreClicked(mail) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.btn_ignore),
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         } else {
             // Wiadomość bezpieczna: wyświetlenie streszczenia
@@ -247,6 +261,19 @@ fun MailDetailScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            OutlinedButton(
+                onClick = { onIgnoreClicked(mail) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.btn_ignore),
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
     }

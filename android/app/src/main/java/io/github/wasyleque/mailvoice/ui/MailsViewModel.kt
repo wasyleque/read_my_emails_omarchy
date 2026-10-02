@@ -3,6 +3,7 @@ package io.github.wasyleque.mailvoice.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.wasyleque.mailvoice.net.ApiResult
+import io.github.wasyleque.mailvoice.net.IgnoreMode
 import io.github.wasyleque.mailvoice.net.ImportantMail
 import io.github.wasyleque.mailvoice.net.MailApi
 import io.github.wasyleque.mailvoice.voice.VoiceSessionController
@@ -40,6 +41,19 @@ class MailsViewModel(
 
     val voiceSessionState: StateFlow<VoiceSessionState> = voiceController.state
 
+    // Stan dialogu ignorowania wiadomości
+    private val _ignoreDialogTarget = MutableStateFlow<ImportantMail?>(null)
+    val ignoreDialogTarget: StateFlow<ImportantMail?> = _ignoreDialogTarget.asStateFlow()
+
+    private val _isIgnoring = MutableStateFlow(false)
+    val isIgnoring: StateFlow<Boolean> = _isIgnoring.asStateFlow()
+
+    private val _ignoreErrorMessage = MutableStateFlow<String?>(null)
+    val ignoreErrorMessage: StateFlow<String?> = _ignoreErrorMessage.asStateFlow()
+
+    private val _userMessage = MutableStateFlow<String?>(null)
+    val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
+
     init {
         loadMails()
     }
@@ -73,6 +87,52 @@ class MailsViewModel(
 
     fun clearSelectedMail() {
         _selectedMail.value = null
+    }
+
+    fun openIgnoreDialog(mail: ImportantMail) {
+        _ignoreErrorMessage.value = null
+        _ignoreDialogTarget.value = mail
+    }
+
+    fun dismissIgnoreDialog() {
+        if (!_isIgnoring.value) {
+            _ignoreDialogTarget.value = null
+            _ignoreErrorMessage.value = null
+        }
+    }
+
+    fun confirmIgnore(mode: IgnoreMode) {
+        val targetMail = _ignoreDialogTarget.value ?: return
+        _isIgnoring.value = true
+        _ignoreErrorMessage.value = null
+
+        viewModelScope.launch {
+            when (val result = mailApi.ignoreMail(targetMail.id, mode.apiValue)) {
+                is ApiResult.Success -> {
+                    _isIgnoring.value = false
+                    _ignoreDialogTarget.value = null
+                    // Usuń zignorowaną wiadomość z lokalnej listy
+                    _mails.value = _mails.value.filter { it.id != targetMail.id }
+                    if (_selectedMail.value?.id == targetMail.id) {
+                        _selectedMail.value = null
+                    }
+                    _userMessage.value = "Zignorowano"
+                    // Odśwież listę z serwera, aby zniknęły wszystkie podobne
+                    loadMails()
+                }
+                is ApiResult.Error -> {
+                    _isIgnoring.value = false
+                    _ignoreErrorMessage.value = result.message
+                    if (result.isUnauthorized) {
+                        _isUnauthorized.value = true
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearUserMessage() {
+        _userMessage.value = null
     }
 
     fun ackMail(mailId: String) {
