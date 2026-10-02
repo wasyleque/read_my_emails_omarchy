@@ -2,8 +2,9 @@
 
 **🇬🇧 English** · [🇵🇱 Polski](README.pl.md)
 
-> 🚧 **Work in progress.** The core logic, GUI and voice layer exist and are covered by tests, but the app has **not yet
-> been run against real mailboxes**, and microphone/speaker, Windows and hardware FIDO2 keys are **untested**.
+> 🚧 **Work in progress.** The core logic, GUI, voice layer and the Android companion are covered by tests and have been
+> **partially tested on live mailboxes** (IMAP fetching, AI analysis, voice, phone pairing and notifications on Linux/Omarchy
+> + an Android 14 phone). **Windows, hardware FIDO2 keys and more mail providers are still untested.**
 > Bug reports and pull requests are very welcome.
 
 A desktop app for **Linux (built for [Omarchy](https://omarchy.org)) and Windows** that fetches mail from several IMAP
@@ -32,6 +33,11 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 - **Contact card and "AI mail search".** Shows the full context of a person when you are about to reply, and finds the
   likeliest mails from a plain-language description (e.g. *"that mail from Kowalski about the renovation invoice"*),
   with a reason and a confidence level. *(Same status as above.)*
+- **"Ignore…" and "VIP…" buttons** next to every important mail (desktop and phone): ignore *similar mail* (same sender
+  and topic), *everything from the sender* or *the whole domain* — or the exact opposite, mark it **VIP** so such mail is
+  always reported. Rules are listed (and removable) in Settings; ignored threads disappear from the digest and VIP
+  threads come first. A suspicious (phishing-looking) mail can never be made VIP with one click. Optionally, everyone
+  you wrote to (your Sent folder) counts as a known correspondent.
 - **Friendly setup wizard**, plain-language errors, big buttons, PL/EN interface.
 
 ### Screenshots
@@ -68,10 +74,12 @@ Your mail never leaves your machine: analysis runs on **your own Ollama server**
 | IMAP fetching (read-only, TLS only), backlog of unread mail, pipeline, scheduler, service loop | ✅ (tested on fakes only) |
 | Secret storage: keyring, encrypted file, FIDO2 backend | ✅ (FIDO2 on a fake device only) |
 | Voice: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (fakes; no real audio hardware test) |
-| GUI: wizard, main window, settings, tray, PL/EN | ✅ (offscreen only) |
+| GUI: wizard, main window, settings, tray, PL/EN | ✅ (used live on Linux) |
 | Topic digest, thread linking, contact card, AI search | ✅ core · ⏳ sent-mail indexing |
 | Anti-phishing hardening | ⏳ in progress ([#9](../../issues/9)) |
-| Test on real mailboxes (Gmail/Outlook/own server), Windows, packaging (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
+| Android companion app (QR pairing, notifications, voice, topic digest, Ignore/VIP) | ✅ tested on a real phone |
+| Live-mailbox tests: IMAP + AI + voice on Linux | ✅ partial (several mailboxes) |
+| More providers (Gmail/Outlook), Windows, packaging (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
 
 Details and architecture decisions: [`AGENTS.md`](AGENTS.md). Open work is tracked in
 [Issues](../../issues) — several are good places to start.
@@ -153,6 +161,9 @@ MailVoice includes a local HTTPS/WebSocket server (`pip install -e ".[server]"`)
 - **Zero raw email or attachments on the phone:** The phone only receives summaries and notifications for important mail.
 - **QR code pairing:** Easily paired via Settings → *Phone (Android)* with a 120s one-time code and certificate SHA-256 pinning.
 - **Headless mode:** Run the service and server without GUI windows via `mailvoice-server` or `python -m mailvoice --headless`.
+- **On the phone:** important mail with summaries, the topic digest ("Matters": waiting for me / for others), voice
+  control (the phone does speech-to-text and text-to-speech, analysis stays on your computer) and the same
+  **Ignore… / VIP…** buttons.
 - See [`docs/mobile-api.md`](docs/mobile-api.md) for full API documentation.
 
 ## Develop

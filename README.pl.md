@@ -2,8 +2,9 @@
 
 [🇬🇧 English](README.md) · **🇵🇱 Polski**
 
-> 🚧 **Projekt roboczy.** Rdzeń logiki, GUI i warstwa głosowa istnieją i mają testy, ale aplikacja **nie była jeszcze
-> uruchomiona na prawdziwych skrzynkach**, a mikrofon/głośnik, Windows i sprzętowy klucz FIDO2 są **nieprzetestowane**.
+> 🚧 **Projekt roboczy.** Rdzeń logiki, GUI, warstwa głosowa i aplikacja na Androida mają testy i były **częściowo
+> testowane na żywej poczcie** (pobieranie IMAP, analiza AI, głos, parowanie i powiadomienia na telefonie — Linux/Omarchy
+> + Android 14). **Windows, sprzętowe klucze FIDO2 i więcej dostawców poczty nadal czekają na testy.**
 > Zgłoszenia błędów i pull requesty są bardzo mile widziane.
 
 Aplikacja desktopowa na **Linuksa (tworzona z myślą o [Omarchy](https://omarchy.org)) i Windows**: pobiera pocztę z kilku
@@ -31,6 +32,11 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
   w trakcie — patrz stan prac.)*
 - **Karta kontaktu i „Wyszukaj maila (AI)”.** Pokazuje pełny kontekst osoby, gdy zamierzasz odpisać, i znajduje
   najbardziej prawdopodobne maile z opisu własnymi słowami, z uzasadnieniem i pewnością. *(Stan jak wyżej.)*
+- **Przyciski „Ignoruj…” i „VIP…”** przy każdym ważnym mailu (komputer i telefon): zignoruj *podobne maile* (ten sam nadawca
+  i temat), *wszystko od nadawcy* albo *całą domenę* — lub działaj odwrotnie i oznacz jako **VIP**, żeby takie maile
+  zawsze powiadamiały. Reguły są na liście w Ustawieniach (można je usuwać); zignorowane wątki znikają z podsumowania
+  tematów, a wątki VIP są na początku. Mail wyglądający na phishing nigdy nie zostanie VIP-em jednym kliknięciem.
+  Opcjonalnie wszyscy, do kogo pisałeś (folder Wysłane), są traktowani jako znani korespondenci.
 - **Prosty kreator konfiguracji**, błędy po ludzku, duże przyciski, interfejs PL/EN.
 
 ### Zrzuty ekranu
@@ -67,10 +73,12 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 | Pobieranie IMAP (tylko odczyt, tylko TLS), zaległe nieprzeczytane, pipeline, scheduler, pętla serwisu | ✅ (testowane tylko na atrapach) |
 | Sejf haseł: keyring, szyfrowany plik, backend FIDO2 | ✅ (FIDO2 tylko na atrapie urządzenia) |
 | Głos: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (atrapy; bez testu na prawdziwym audio) |
-| GUI: kreator, okno główne, ustawienia, zasobnik, PL/EN | ✅ (tylko offscreen) |
+| GUI: kreator, okno główne, ustawienia, zasobnik, PL/EN | ✅ (używane na żywo na Linuksie) |
 | Podsumowanie tematów, łączenie wątków, karta kontaktu, wyszukiwanie AI | ✅ rdzeń · ⏳ indeksowanie wysłanych |
 | Utwardzenie antyphishingowe | ⏳ w toku ([#9](../../issues/9)) |
-| Test na prawdziwych skrzynkach (Gmail/Outlook/własny serwer), Windows, pakowanie (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
+| Aplikacja na Androida (parowanie QR, powiadomienia, głos, podsumowanie tematów, Ignoruj/VIP) | ✅ przetestowana na prawdziwym telefonie |
+| Testy na żywej poczcie: IMAP + AI + głos na Linuksie | ✅ częściowo (kilka skrzynek) |
+| Więcej dostawców (Gmail/Outlook), Windows, pakowanie (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
 
 Szczegóły i decyzje architektoniczne: [`AGENTS.md`](AGENTS.md). Otwarte zadania są w [Issues](../../issues) —
 kilka nadaje się na dobry początek.
@@ -151,6 +159,9 @@ MailVoice zawiera wbudowany serwer lokalny HTTPS/WebSocket (`pip install -e ".[s
 - **Brak surowych maili i załączników na telefonie:** Telefon otrzymuje wyłącznie streszczenia i powiadomienia o ważnych wiadomościach.
 - **Parowanie kodem QR:** Szybkie parowanie w Ustawieniach → *Telefon (Android)* z jednorazowym kodem (120 s) i przypięciem odcisku certyfikatu SHA-256.
 - **Tryb bezokienkowy (headless):** Możliwość uruchomienia serwisu i serwera w tle bez interfejsu graficznego za pomocą `mailvoice-server` lub `python -m mailvoice --headless`.
+- **Na telefonie:** ważne maile ze streszczeniami, podsumowanie tematów („Sprawy”: czeka na mnie / na innych), sterowanie
+  głosem (telefon robi rozpoznawanie i czytanie mowy, analiza zostaje na komputerze) oraz te same przyciski
+  **Ignoruj… / VIP…**.
 - Pełna specyfikacja API dostępna w [`docs/mobile-api.md`](docs/mobile-api.md).
 
 ## Rozwój

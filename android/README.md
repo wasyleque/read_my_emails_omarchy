@@ -101,6 +101,17 @@ Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
   - Po zatwierdzeniu: natychmiastowe usunięcie pozycji z lokalnego widoku, powiadomienie „Zignorowano” (Toast) oraz automatyczne odświeżenie listy z serwera w celu zsynchronizowania innych wiadomości objętych nowo utworzoną regułą.
   - Przyjazna obsługa błędów (400, 404, 503, brak sieci) w języku polskim z możliwością natychmiastowego ponowienia próby, a przy błędzie autoryzacji (401) automatyczny powrót do ekranu parowania.
 
+## 5a. Oznaczanie VIP (B5: Przycisk „VIP…”) — lustro „Ignoruj…”
+
+- **API (`POST /v1/mails/{id}/vip`)**: te same trzy tryby (`similar` / `sender` / `domain`) i ten sam model odpowiedzi.
+  Komputer zapamiętuje regułę VIP: takie maile zawsze powiadamiają, a wątki z nimi są pierwsze w podsumowaniu.
+- **Interfejs**: przycisk „VIP…” obok „Ignoruj…” na liście i w szczegółach; to samo okno wyboru (`MailRuleDialog`, rodzaj
+  `VIP`/`IGNORE`) z tekstami VIP. Dla maili podejrzanych (⚠) przycisk jest **ukryty** (podrobiony nadawca nie zostaje VIP-em
+  jednym kliknięciem; ViewModel dodatkowo odrzuca takie żądanie). Po sukcesie: „Oznaczono jako VIP” i odświeżenie listy.
+- **Podsumowanie („Sprawy”)**: opcjonalne pole `vip` → znaczek „★ VIP”; limit tematów liczony jest osobno w każdej grupie
+  statusu (duża grupa „czeka na mnie” nie wypycha „czeka na innych”).
+- `UiWiringTest` pilnuje, żeby akcje ViewModelu były faktycznie podpięte w `MainActivity`.
+
 ---
 
 ## 6. Obsługa stanów ekranu i podsumowanie spraw (B4: Sprawy i odporność UI)
