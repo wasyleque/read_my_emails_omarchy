@@ -85,12 +85,25 @@
     <string name="status_ignoring">Saving ignore rule...</string>
     <string name="msg_mail_ignored">Ignored</string>
 
+    <!-- Screen states and errors -->
+    <string name="status_loading_mails">Loading important emails…</string>
+    <string name="status_preparing_digest">Preparing summary…</string>
+    <string name="status_preparing_digest_desc">First load may take a few seconds</string>
+    <string name="error_loading_mails">Failed to load emails</string>
+    <string name="error_loading_digest">Failed to load summary</string>
+    <string name="btn_dismiss">Dismiss</string>
+
     <!-- Digest -->
     <string name="digest_week">Week (7 days)</string>
     <string name="digest_month">Month (30 days)</string>
     <string name="digest_group_me">Waiting for you (%1$d)</string>
     <string name="digest_group_others">Waiting for others (%1$d)</string>
     <string name="digest_group_info">Information (%1$d)</string>
+    <string name="digest_group_closed">Closed (%1$d)</string>
+    <string name="digest_counts_header_format">Waiting for you: %1$d · Waiting for others: %2$d</string>
+    <string name="digest_shown_total_format">Showing %1$d of %2$d topics</string>
+    <string name="btn_show_closed_and_info_format">Show closed and informational too (%1$d)</string>
+    <string name="digest_toggle_closed_and_info">Show closed and informational too</string>
     <string name="empty_digest">No active topics in selected period.</string>
     <string name="topic_exchange_format">Exchange: %1$s</string>
     <string name="topic_mail_count_format">Thread emails: %1$d</string>

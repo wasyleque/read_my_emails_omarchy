@@ -914,6 +914,10 @@ class MainWindow(QMainWindow):
                     f"font-weight: bold; font-size: 13px; color: {theme.c('text')};"
                 )
                 header_layout.addWidget(lbl_title)
+                if topic.vip:
+                    lbl_vip = QLabel(tr("digest_vip_badge"))
+                    lbl_vip.setStyleSheet(f"color: {theme.c('accent')}; font-weight: bold;")
+                    header_layout.addWidget(lbl_vip)
                 header_layout.addStretch()
 
                 btn_listen = QPushButton(tr("digest_btn_listen"))

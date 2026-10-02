@@ -13,10 +13,27 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+sealed interface MailsUiState {
+    data object Loading : MailsUiState
+    data class Content(
+        val mails: List<ImportantMail>,
+        val isRefreshing: Boolean = false,
+        val refreshError: String? = null
+    ) : MailsUiState
+    data object Empty : MailsUiState
+    data class Error(
+        val message: String,
+        val canRetry: Boolean = true
+    ) : MailsUiState
+}
+
 class MailsViewModel(
     private val mailApi: MailApi,
     private val voiceController: VoiceSessionController = VoiceSessionController(mailApi)
 ) : ViewModel() {
+
+    private val _uiState = MutableStateFlow<MailsUiState>(MailsUiState.Loading)
+    val uiState: StateFlow<MailsUiState> = _uiState.asStateFlow()
 
     private val _mails = MutableStateFlow<List<ImportantMail>>(emptyList())
     val mails: StateFlow<List<ImportantMail>> = _mails.asStateFlow()
@@ -63,11 +80,27 @@ class MailsViewModel(
         _errorMessage.value = null
         _isSecurityAlert.value = false
 
+        val current = _uiState.value
+        if (current is MailsUiState.Content) {
+            _uiState.value = current.copy(isRefreshing = true, refreshError = null)
+        } else {
+            _uiState.value = MailsUiState.Loading
+        }
+
         viewModelScope.launch {
             when (val result = mailApi.getImportantMails(limit = 30)) {
                 is ApiResult.Success -> {
                     _mails.value = result.data
                     _isLoading.value = false
+                    if (result.data.isEmpty()) {
+                        _uiState.value = MailsUiState.Empty
+                    } else {
+                        _uiState.value = MailsUiState.Content(
+                            mails = result.data,
+                            isRefreshing = false,
+                            refreshError = null
+                        )
+                    }
                 }
                 is ApiResult.Error -> {
                     _isLoading.value = false
@@ -76,8 +109,27 @@ class MailsViewModel(
                     if (result.isUnauthorized) {
                         _isUnauthorized.value = true
                     }
+                    val stateNow = _uiState.value
+                    if (stateNow is MailsUiState.Content) {
+                        _uiState.value = stateNow.copy(
+                            isRefreshing = false,
+                            refreshError = result.message
+                        )
+                    } else {
+                        _uiState.value = MailsUiState.Error(
+                            message = result.message,
+                            canRetry = !result.isUnauthorized
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    fun dismissRefreshError() {
+        val current = _uiState.value
+        if (current is MailsUiState.Content && current.refreshError != null) {
+            _uiState.value = current.copy(refreshError = null)
         }
     }
 
@@ -112,7 +164,16 @@ class MailsViewModel(
                     _isIgnoring.value = false
                     _ignoreDialogTarget.value = null
                     // Usuń zignorowaną wiadomość z lokalnej listy
-                    _mails.value = _mails.value.filter { it.id != targetMail.id }
+                    val filteredMails = _mails.value.filter { it.id != targetMail.id }
+                    _mails.value = filteredMails
+                    val current = _uiState.value
+                    if (current is MailsUiState.Content) {
+                        if (filteredMails.isEmpty()) {
+                            _uiState.value = MailsUiState.Empty
+                        } else {
+                            _uiState.value = current.copy(mails = filteredMails)
+                        }
+                    }
                     if (_selectedMail.value?.id == targetMail.id) {
                         _selectedMail.value = null
                     }
@@ -140,8 +201,13 @@ class MailsViewModel(
             when (val result = mailApi.ackMail(mailId)) {
                 is ApiResult.Success -> {
                     // Aktualizuj stan lokalnie na liście
-                    _mails.value = _mails.value.map {
+                    val updatedMails = _mails.value.map {
                         if (it.id == mailId) it.copy(acknowledged = true) else it
+                    }
+                    _mails.value = updatedMails
+                    val current = _uiState.value
+                    if (current is MailsUiState.Content) {
+                        _uiState.value = current.copy(mails = updatedMails)
                     }
                     if (_selectedMail.value?.id == mailId) {
                         _selectedMail.value = _selectedMail.value?.copy(acknowledged = true)

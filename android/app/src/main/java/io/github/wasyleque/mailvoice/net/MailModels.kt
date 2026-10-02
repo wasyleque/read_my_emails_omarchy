@@ -78,7 +78,10 @@ data class DigestTopic(
  */
 data class TopicDigest(
     val period: String,
-    val topics: List<DigestTopic>
+    val topics: List<DigestTopic>,
+    val counts: Map<String, Int> = emptyMap(),
+    val total: Int? = null,
+    val shown: Int? = null
 )
 
 /**

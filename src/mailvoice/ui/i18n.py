@@ -107,6 +107,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_importance": "Ważność",
         "tab_people": "Ludzie (VIP)",
         "tab_rules": "Słowa i ignorowanie",
+        "digest_vip_badge": "★ VIP",
         "vip_hint": (
             "Wpisz cały adres albo samą domenę, np. @firma.pl — wtedy liczą się wszyscy z firmy."
         ),
@@ -411,6 +412,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_importance": "Importance",
         "tab_people": "People (VIP)",
         "tab_rules": "Words and ignoring",
+        "digest_vip_badge": "★ VIP",
         "vip_hint": (
             "Enter a full address or just a domain, e.g. @company.com — everyone there counts."
         ),

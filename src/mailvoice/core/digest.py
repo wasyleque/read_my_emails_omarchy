@@ -61,6 +61,7 @@ class Topic:
     last_activity: datetime
     importance: int
     mail_count: int
+    vip: bool = False  # wątek z VIP-em (lista VIP lub osoba z Wysłanych w trybie VIP)
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,44 @@ def _fallback_who_to_whom(records: list[MailIndexRecord]) -> list[str]:
     return lines
 
 
+def _vip_rules(store: Store, config: AppConfig):
+    """Te same reguły VIP co przy ocenie maili: lista VIP + osoby, do których piszesz."""
+    from mailvoice.core.rules import Rules
+
+    mine = {a.username.lower() for a in config.accounts if a.username}
+    addresses, domains = store.get_correspondents(exclude=mine)
+    return Rules(
+        vip_senders=tuple(config.vip_senders),
+        known_addresses=addresses,
+        known_domains=domains,
+        auto_vip=config.auto_vip,
+    )
+
+
+def _record_ignored(config: AppConfig, record: MailIndexRecord) -> bool:
+    """Reguły „Ignoruj”: maile przychodzące po nadawcy/temacie, wychodzące po adresatach."""
+    from mailvoice.core.ignore import is_ignored_by_config
+
+    party = record.recipients if record.direction == "out" else record.sender
+    return is_ignored_by_config(config, party or "", record.subject or "")
+
+
+def _thread_is_vip(records: list[MailIndexRecord], rules) -> bool:
+    """Wątek ma VIP-a, jeśli któryś PRZYCHODZĄCY mail jest od VIP-a (jak w ocenie maili).
+
+    Maile z jakimkolwiek sygnałem phishingu nie awansują wątku: nadawca bywa podrobiony.
+    """
+    from mailvoice.core.rules import MailInfo, evaluate
+
+    for r in records:
+        if r.direction == "out" or r.risk not in (None, "", "low") or r.risk_reasons:
+            continue
+        result = evaluate(MailInfo(sender=r.sender or "", subject=r.subject or "", body=""), rules)
+        if result.force_important:
+            return True
+    return False
+
+
 class _SkipLlm(Exception):
     """Wewnętrzny sygnał: nie pytaj modelu o ten temat."""
 
@@ -211,6 +250,7 @@ def build_digest(
     now = datetime.now(timezone.utc)
     started = time.monotonic()
     llm_calls = 0
+    vip_rules = _vip_rules(store, config)
     consecutive_failures = 0
 
     # 1. Ustalenie zakresu dat
@@ -268,11 +308,23 @@ def build_digest(
             continue
 
         thread_records.sort(key=lambda r: r.date or "")
+
+        # Reguły „Ignoruj”: wątek znika, gdy zignorowano wszystkie jego maile przychodzące
+        # (albo, w wątku samych wychodzących, wszystkich adresatów).
+        had_incoming = any(r.direction != "out" for r in thread_records)
+        thread_records = [r for r in thread_records if not _record_ignored(config, r)]
+        if not thread_records or (
+            had_incoming and not any(r.direction != "out" for r in thread_records)
+        ):
+            continue
         last_record = thread_records[-1]
         last_mail_date = last_record.date
         mail_count = len(thread_records)
         last_activity = _parse_iso_date(last_mail_date)
         importance = max((r.importance or 0 for r in thread_records), default=0)
+        topic_vip = _thread_is_vip(thread_records, vip_rules)
+        if topic_vip:  # VIP nie może mieć ważności poniżej progu — tak jak pojedynczy mail
+            importance = max(importance, config.importance_threshold)
         participants = _extract_participants(thread_records)
 
         # 4. Sprawdzenie pamięci podręcznej (cache w SQLite)
@@ -296,6 +348,7 @@ def build_digest(
                     last_activity=last_activity,
                     importance=importance,
                     mail_count=mail_count,
+                    vip=topic_vip,
                 )
             )
             continue
@@ -417,6 +470,7 @@ def build_digest(
                 last_activity=last_activity,
                 importance=importance,
                 mail_count=mail_count,
+                vip=topic_vip,
             )
         )
 
@@ -424,6 +478,7 @@ def build_digest(
     topics.sort(
         key=lambda t: (
             _STATUS_PRIORITY.get(t.status, 99),
+            0 if t.vip else 1,  # w obrębie statusu najpierw wątki z VIP-ami
             -t.importance,
             -t.last_activity.timestamp(),
         )

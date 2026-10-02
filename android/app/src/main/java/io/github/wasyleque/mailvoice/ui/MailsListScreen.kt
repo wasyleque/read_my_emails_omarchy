@@ -45,13 +45,15 @@ import io.github.wasyleque.mailvoice.net.ImportantMail
 
 @Composable
 fun MailsListScreen(
-    mails: List<ImportantMail>,
-    isLoading: Boolean,
+    uiState: MailsUiState,
     onRefresh: () -> Unit,
     onMailClicked: (ImportantMail) -> Unit,
     onStartVoiceSession: () -> Unit,
-    onIgnoreClicked: (ImportantMail) -> Unit
+    onIgnoreClicked: (ImportantMail) -> Unit,
+    onDismissRefreshError: () -> Unit = {}
 ) {
+    val isLoading = uiState is MailsUiState.Loading || (uiState is MailsUiState.Content && uiState.isRefreshing)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -84,72 +86,175 @@ fun MailsListScreen(
             }
         }
 
-        // Duży czytelny przycisk odsłuchiwania wszystkich ważnych maili
-        Button(
-            onClick = onStartVoiceSession,
-            enabled = mails.isNotEmpty(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .padding(bottom = 12.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_play),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = stringResource(R.string.btn_listen_all),
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
-
-        if (mails.isEmpty() && !isLoading) {
-            // Stan pusty z przyjaznym komunikatem
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+        when (uiState) {
+            is MailsUiState.Loading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_mail),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.empty_mails),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.empty_mails_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
+                        Text(
+                            text = stringResource(R.string.status_loading_mails),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(mails, key = { it.id }) { mail ->
-                    MailItemCard(
-                        mail = mail,
-                        onClick = { onMailClicked(mail) },
-                        onIgnoreClicked = { onIgnoreClicked(mail) }
+            is MailsUiState.Error -> {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_warning),
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = stringResource(R.string.error_loading_mails),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = uiState.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        if (uiState.canRetry) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Button(
+                                onClick = onRefresh,
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.btn_retry),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            is MailsUiState.Empty -> {
+                // Stan pusty z przyjaznym komunikatem (tylko po udanym pobraniu 200 z pustą listą)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_mail),
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.empty_mails),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.empty_mails_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            is MailsUiState.Content -> {
+                // Baner błędu odświeżania (zachowuje starą listę)
+                if (uiState.refreshError != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = uiState.refreshError,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            androidx.compose.material3.TextButton(onClick = onRefresh) {
+                                Text(stringResource(R.string.btn_retry))
+                            }
+                        }
+                    }
+                }
+
+                // Duży czytelny przycisk odsłuchiwania wszystkich ważnych maili
+                Button(
+                    onClick = onStartVoiceSession,
+                    enabled = uiState.mails.isNotEmpty(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_play),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.btn_listen_all),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(uiState.mails, key = { it.id }) { mail ->
+                        MailItemCard(
+                            mail = mail,
+                            onClick = { onMailClicked(mail) },
+                            onIgnoreClicked = { onIgnoreClicked(mail) }
+                        )
+                    }
                 }
             }
         }

@@ -118,12 +118,26 @@ class MailApi(
     }
 
     /**
-     * Pobiera podsumowanie tematów (GET /v1/digest?days=...).
+     * Pobiera podsumowanie tematów (GET /v1/digest?days=...&limit=...[&all=1]).
+     * Używa dedykowanego limitu czasu odczytu 30 sekund.
      */
-    suspend fun getDigest(days: Int = 30): ApiResult<TopicDigest> =
-        executeRequest(
-            endpoint = "/v1/digest?days=$days",
-            builder = Request.Builder().get()
+    suspend fun getDigest(
+        days: Int = 30,
+        limit: Int = 60,
+        all: Boolean = false
+    ): ApiResult<TopicDigest> {
+        val queryParams = buildString {
+            append("days=").append(days)
+            append("&limit=").append(limit)
+            if (all) {
+                append("&all=1")
+            }
+        }
+
+        return executeRequest(
+            endpoint = "/v1/digest?$queryParams",
+            builder = Request.Builder().get(),
+            readTimeoutMs = 30_000L
         ) { bodyString ->
             val json = JSONObject(bodyString)
             val period = json.optString("period", "ostatnie $days dni")
@@ -151,11 +165,28 @@ class MailApi(
                 )
             }
 
+            val countsMap = mutableMapOf<String, Int>()
+            val countsObj = json.optJSONObject("counts")
+            if (countsObj != null) {
+                val keys = countsObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    countsMap[key] = countsObj.optInt(key, 0)
+                }
+            }
+
+            val total = if (json.has("total")) json.optInt("total") else null
+            val shown = if (json.has("shown")) json.optInt("shown") else null
+
             TopicDigest(
                 period = period,
-                topics = topicsList
+                topics = topicsList,
+                counts = countsMap,
+                total = total,
+                shown = shown
             )
         }
+    }
 
     /**
      * Przesyła komendę głosową użytkownika do interpretacji przez serwer (POST /v1/voice/command).
@@ -199,6 +230,7 @@ class MailApi(
     private suspend fun <T> executeRequest(
         endpoint: String,
         builder: Request.Builder,
+        readTimeoutMs: Long? = null,
         parser: (String) -> T
     ): ApiResult<T> = withContext(ioDispatcher) {
         if (!tokenStore.isPaired()) {
@@ -222,13 +254,21 @@ class MailApi(
         )
         val port = tokenStore.getServerPort()
 
-        val client = try {
+        val baseClient = try {
             clientFactory(fingerprint)
         } catch (e: Exception) {
             return@withContext ApiResult.Error(
                 message = "Błąd inicjalizacji klienta TLS: ${e.localizedMessage ?: "brak szczegółów"}",
                 isSecurityAlert = true
             )
+        }
+
+        val client = if (readTimeoutMs != null) {
+            baseClient.newBuilder()
+                .readTimeout(readTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build()
+        } else {
+            baseClient
         }
 
         val request = builder
@@ -244,7 +284,7 @@ class MailApi(
                         try {
                             ApiResult.Success(parser(body))
                         } catch (e: Exception) {
-                            ApiResult.Error("Błędny format danych odebranych z serwera: ${e.localizedMessage ?: "błąd parsowania"}")
+                            ApiResult.Error("Błąd przetwarzania odpowiedzi serwera.")
                         }
                     }
                     400 -> {
@@ -257,7 +297,7 @@ class MailApi(
                     401 -> {
                         tokenStore.clear()
                         ApiResult.Error(
-                            message = "Autoryzacja wygasła lub została cofnięta na komputerze. Sparuj telefon ponownie.",
+                            message = "Komputer odrzucił telefon — sparuj ponownie.",
                             isUnauthorized = true,
                             httpCode = 401
                         )
@@ -276,8 +316,8 @@ class MailApi(
                             httpCode = 404
                         )
                     }
-                    429 -> ApiResult.Error("Zbyt wiele zapytań do serwera. Odczekaj chwilę.", httpCode = 429)
-                    500 -> ApiResult.Error("Wewnętrzny błąd programu MailVoice na komputerze.", httpCode = 500)
+                    429 -> ApiResult.Error("Zbyt wiele zapytań, spróbuj za chwilę.", httpCode = 429)
+                    500 -> ApiResult.Error("Błąd serwera na komputerze.", httpCode = 500)
                     503 -> {
                         val errorDetail = parseErrorMessage(response.body?.string())
                         ApiResult.Error(
@@ -306,7 +346,7 @@ class MailApi(
             )
         } catch (e: ConnectException) {
             ApiResult.Error(
-                message = "Nie mogę połączyć się z komputerem (czy jest włączony i w tej samej sieci Wi-Fi?).",
+                message = "Brak połączenia z komputerem.",
                 isNetworkError = true
             )
         } catch (e: UnknownHostException) {
@@ -316,7 +356,7 @@ class MailApi(
             )
         } catch (e: SocketTimeoutException) {
             ApiResult.Error(
-                message = "Przekroczono czas oczekiwania na odpowiedź komputera.",
+                message = "Komputer nie odpowiedział na czas.",
                 isNetworkError = true
             )
         } catch (e: IOException) {

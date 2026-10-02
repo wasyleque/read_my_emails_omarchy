@@ -434,6 +434,7 @@ async def handle_digest(request: web.Request) -> web.Response:
             "why": filter_urls(t.why),
             "importance": t.importance,
             "mail_count": t.mail_count,
+            "vip": t.vip,
             "last_activity": t.last_activity.isoformat() if t.last_activity else None,
             "who_to_whom": t.who_to_whom,
         }

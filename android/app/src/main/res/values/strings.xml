@@ -85,12 +85,25 @@
     <string name="status_ignoring">Zapisywanie reguły ignorowania...</string>
     <string name="msg_mail_ignored">Zignorowano</string>
 
+    <!-- Stany ekranów i błędy -->
+    <string name="status_loading_mails">Ładowanie ważnych wiadomości…</string>
+    <string name="status_preparing_digest">Przygotowuję podsumowanie…</string>
+    <string name="status_preparing_digest_desc">Pierwsze ładowanie może potrwać kilka sekund</string>
+    <string name="error_loading_mails">Nie udało się pobrać wiadomości</string>
+    <string name="error_loading_digest">Nie udało się pobrać podsumowania</string>
+    <string name="btn_dismiss">Zamknij</string>
+
     <!-- Podsumowanie tematów (Digest) -->
     <string name="digest_week">Tydzień (7 dni)</string>
     <string name="digest_month">Miesiąc (30 dni)</string>
     <string name="digest_group_me">Czeka na Ciebie (%1$d)</string>
     <string name="digest_group_others">Czeka na innych (%1$d)</string>
     <string name="digest_group_info">Informacje (%1$d)</string>
+    <string name="digest_group_closed">Zamknięte (%1$d)</string>
+    <string name="digest_counts_header_format">Czeka na Ciebie: %1$d · Czeka na innych: %2$d</string>
+    <string name="digest_shown_total_format">Pokazano %1$d z %2$d tematów</string>
+    <string name="btn_show_closed_and_info_format">Pokaż także zamknięte i informacyjne (%1$d)</string>
+    <string name="digest_toggle_closed_and_info">Pokaż także zamknięte i informacyjne</string>
     <string name="empty_digest">Brak aktywnych spraw w wybranym okresie.</string>
     <string name="topic_exchange_format">Wymiana: %1$s</string>
     <string name="topic_mail_count_format">Wiadomości w wątku: %1$d</string>
