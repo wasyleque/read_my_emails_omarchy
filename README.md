@@ -1,103 +1,128 @@
 # MailVoice (read_my_emails_omarchy)
 
-> 🚧 **Projekt roboczy / work in progress.** Rdzeń logiki działa i ma testy, GUI i głos są jeszcze w planach.
-> Zgłoszenia błędów i pomysły są mile widziane.
+**🇬🇧 English** · [🇵🇱 Polski](README.pl.md)
 
-Aplikacja GUI na **Linux (Omarchy) i Windows**, która pobiera pocztę z kilku skrzynek IMAP, a **lokalny model AI
-(Ollama)** ocenia, które nowe maile są naprawdę ważne. O ważnych mailach informuje **głosem po polsku lub angielsku**
-i streszcza je w 3–4 zdaniach zamiast czytać całość.
+> 🚧 **Work in progress.** The core logic, GUI and voice layer exist and are covered by tests, but the app has **not yet
+> been run against real mailboxes**, and microphone/speaker, Windows and hardware FIDO2 keys are **untested**.
+> Bug reports and pull requests are very welcome.
 
-*English: a cross-platform (Linux/Windows) desktop app that fetches mail from several IMAP accounts, uses a local
-Ollama model to decide which new mails matter, and tells you by voice (Polish/English) with a 3–4 sentence summary.
-Nothing is ever sent, deleted or marked as read.*
+A desktop app for **Linux (built for [Omarchy](https://omarchy.org)) and Windows** that fetches mail from several IMAP
+accounts, lets a **local AI model (Ollama)** decide which new messages really matter to you, and tells you about them
+**by voice, in Polish or English** — with a 3–4 sentence summary instead of reading the whole mail.
+It is designed to be usable by people who are not technical.
 
-## Jak to działa
+Your mail never leaves your machine: analysis runs on **your own Ollama server** (local or on your LAN).
 
-1. Co N minut pobiera **tylko nowe** maile (UID większy niż ostatnio widziany, dedup po `Message-ID`).
-2. **Reguły bez LLM:** nadawcy VIP, słowa kluczowe, blokady, odpowiedzi na Twoje wysłane maile.
-3. **Model lokalny** ocenia resztę wg Twojego opisu "jak analizować maile" i zwraca ustrukturyzowany JSON
-   (ważność 0–10, powód, akcja, język).
-4. Powiadomienie: powtarzany sygnał dźwiękowy **albo** pytanie głosowe "masz czas wysłuchać nowych maili?".
-5. Zaległe, **nieprzeczytane** starsze maile, które wyglądają na ważne, są zgłaszane osobno: aplikacja pyta, czy
-   chcesz usłyszeć ich streszczenia.
-6. **Podsumowanie tematów (Digest):** analiza wątków z wybranego okresu (tydzień, miesiąc, kwartał) — łączy kropki:
-   kto do kogo i w jakiej sprawie pisał, dlaczego oraz na kogo czeka odpowiedź ("Czeka na Ciebie" / "Czeka na innych" / "Informacje").
-7. **Karta kontaktu i kontekst:** w widoku maila wyświetla kim jest nadawca, otwarte sprawy i ostatnie wymiany.
-8. **Inteligentne wyszukiwanie AI:** znajdowanie wiadomości na podstawie zapytań w języku naturalnym
-   (np. *"ten mail od Kowalskiego o fakturze za remont"*), z rozszerzaniem kontekstu, indeksem SQLite FTS5 i oceną prawdopodobieństwa (wysoka/średnia/niska pewność).
+## What it does
 
-**Prywatność i bezpieczeństwo:** dostęp do poczty jest wyłącznie do odczytu (`BODY.PEEK`, flagi się nie zmieniają).
-Tabela indeksu wiadomości w SQLite (`mail_index`) przechowuje **wyłącznie metadane oraz krótkie streszczenia — NIGDY pełną treść maili**.
-Treść maili trafia tylko do lokalnego modelu Ollama na Twoim komputerze lub w sieci LAN, a hasła przechowywane są w bezpiecznym
-sejfie (Keyring, AES-256-GCM z scrypt lub klucz FIDO2). Treści maili i haseł nigdy nie logujemy.
+- **Several mailboxes** (Gmail, Outlook/Microsoft 365, WP, Onet, O2, Interia, any IMAP server).
+- **Only new mail is analysed.** Already-seen messages are skipped in every later cycle (UID tracking + `Message-ID`
+  de-duplication, safe against `UIDVALIDITY` resets).
+- **"What matters to me" in your own words.** You describe in plain language how to judge mail; add VIP senders, keywords
+  and blocked senders; replies to mail you sent get a bonus. A cheap rule layer runs first, the LLM judges the rest and
+  returns validated JSON (importance 0–10, reason, action, language).
+- **Voice notifications.** Choose between a repeating beep reminder, or the app asking *"Do you have time to hear your
+  new mail?"*. It then reads a short summary (max 4 sentences) per mail and understands commands like *next / repeat /
+  skip / stop* (PL + EN).
+- **Backlog of older unread mail.** If older **unread** messages look important, the app asks separately whether you want
+  to hear them. Your answer is remembered, also across restarts.
+- **Topic digest — "connect the dots".** Summarises the last month by default (configurable): threads, who wrote to
+  whom, why, and whether the ball is in your court or waiting on others. *(Core in place; indexing of your sent mail is
+  being finished — see status.)*
+- **Contact card and "AI mail search".** Shows the full context of a person when you are about to reply, and finds the
+  likeliest mails from a plain-language description (e.g. *"that mail from Kowalski about the renovation invoice"*),
+  with a reason and a confidence level. *(Same status as above.)*
+- **Friendly setup wizard**, plain-language errors, big buttons, PL/EN interface.
 
-## Stan prac
+### Screenshots
 
-| Etap | Status |
+| Setup wizard | Main window | Settings |
+|---|---|---|
+| ![Add account](docs/screenshots/wizard_account.png) | ![Main window](docs/screenshots/main_window.png) | ![Settings](docs/screenshots/settings.png) |
+
+| Topic digest | Contact context | AI mail search |
+|---|---|---|
+| ![Digest](docs/screenshots/main_window_digest.png) | ![Context](docs/screenshots/main_window_context.png) | ![Search](docs/screenshots/search_dialog.png) |
+
+*Screenshots are rendered offscreen with sample data.*
+
+## Privacy and safety
+
+- **Read-only.** The app never sends, deletes or marks mail as read (`BODY.PEEK`).
+- **Local AI only.** Mail content goes only to the Ollama endpoint(s) you configure.
+- **Passwords** live in the system keyring (fallback: an AES-256-GCM encrypted file with a scrypt key; optional FIDO2
+  `hmac-secret` protection). They are never written to the config file or logs.
+- **TLS is mandatory** for IMAP; plain connections are refused.
+- **The local index stores only metadata and short summaries** (never full mail bodies), with a retention limit
+  (`index_retention_days`, default 90).
+- **Anti-phishing rules are non-negotiable** — see [`SECURITY.md`](SECURITY.md): the app never opens links, never
+  downloads attachments and never obeys instructions found (or hidden) in mail. *These rules are the design contract;
+  the full implementation (safe fetch without attachments, hidden-text stripping, prompt-injection defence, phishing
+  scoring) is **in progress** — tracked in [#9](../../issues/9). Until it lands, treat the app as experimental.*
+
+## Status
+
+| Area | Status |
 |---|---|
-| Szkielet, konfiguracja, baza SQLite (dedup) | ✅ |
-| Parser maili, czyszczenie HTML/cytatów | ✅ |
-| Reguły (VIP, słowa kluczowe, blokady, odpowiedzi) | ✅ |
-| Klient Ollamy (JSON schema, failover LAN/lokalny), streszczenia | ✅ |
-| Pobieranie IMAP, zaległe nieprzeczytane, pipeline, scheduler, serwis | ✅ |
-| Sejf haseł (KeyringStore, EncryptedFileStore AES-256-GCM, FIDO2 HMAC-secret) | ✅ |
-| Głos: TTS (Piper PL/EN), STT (faster-whisper), dialog, komendy, beeper | ✅ (protokoły, fake'i i backendy) |
-| GUI (PySide6): kreator startowy, okno główne, zasobnik, i18n PL/EN | ✅ |
-| Integracja end-to-end na fizycznej skrzynce / pakowanie (.exe / AppImage) | ⏳ |
+| Config, SQLite de-duplication, mail parsing, rules, Ollama client with LAN/local failover, summaries | ✅ |
+| IMAP fetching (read-only, TLS only), backlog of unread mail, pipeline, scheduler, service loop | ✅ (tested on fakes only) |
+| Secret storage: keyring, encrypted file, FIDO2 backend | ✅ (FIDO2 on a fake device only) |
+| Voice: Piper TTS, faster-whisper STT, dialog, beeper | ✅ (fakes; no real audio hardware test) |
+| GUI: wizard, main window, settings, tray, PL/EN | ✅ (offscreen only) |
+| Topic digest, thread linking, contact card, AI search | ✅ core · ⏳ sent-mail indexing |
+| Anti-phishing hardening | ⏳ in progress ([#9](../../issues/9)) |
+| Test on real mailboxes (Gmail/Outlook/own server), Windows, packaging (.exe/AppImage) | ⏳ ([#3](../../issues/3)) |
 
-Szczegółowy plan i decyzje architektoniczne: [`AGENTS.md`](AGENTS.md).
+Details and architecture decisions: [`AGENTS.md`](AGENTS.md). Open work is tracked in
+[Issues](../../issues) — several are good places to start.
 
-## Instalacja dla użytkownika
+## Install (for users)
 
-### 1. Pobierz i uruchom Ollamę (Sztuczna Inteligencja)
-Pobierz instalator ze strony [ollama.com](https://ollama.com) i zainstaluj program.
-W terminalu / wierszu poleceń pobierz polecany model AI:
-```bash
-ollama run qwen3:8b
-# lub polski model:
-ollama run qooba/bielik-11b-v3.0-instruct
-```
+> No packaged installer yet. You need Python 3.12.
 
-### 2. Synteza mowy (Piper TTS — zalecane)
-Aplikacja czyta podsumowania na głos za pomocą szybkiego, lokalnego syntezatora Piper:
-- Pobierz binarkę `piper` z [GitHub Piper Releases](https://github.com/rhasspy/piper/releases) i dodaj ją do ścieżki systemowej `PATH`.
-- Pobierz model głosu (np. polski `pl_PL-darkman-medium.onnx` wraz z plikiem `.json`).
-*(W przypadku braku Pipera aplikacja wyświetla czytelne powiadomienie lub korzysta z sygnałów dźwiękowych).*
+1. **Ollama** — install from [ollama.com](https://ollama.com), then pull a model:
+   ```bash
+   ollama pull qwen3:8b                         # fast, good for English
+   ollama pull qooba/bielik-11b-v3.0-instruct   # best for Polish
+   ```
+2. **Piper (voice output, optional)** — get the `piper` binary and a voice (e.g. `pl_PL-darkman-medium` or an
+   `en_US` voice) from the [Piper releases](https://github.com/rhasspy/piper/releases) and put `piper` on your `PATH`.
+   Without Piper the app falls back to beeps and on-screen messages.
+3. **MailVoice**
+   ```bash
+   git clone https://github.com/wasyleque/read_my_emails_omarchy.git
+   cd read_my_emails_omarchy
+   python3.12 -m venv .venv && source .venv/bin/activate
+   pip install -e ".[voice]"
+   python -m mailvoice
+   ```
+4. A step-by-step wizard starts on first run: language → mail account (with a connection test) → Ollama detection →
+   what matters to you → notifications and a voice test.
 
-### 3. Uruchomienie aplikacji MailVoice
-Zainstaluj pakiet z opcjonalnymi zależnościami głosu:
-```bash
-pip install -e ".[voice]"
-python -m mailvoice
-```
-Przy pierwszym uruchomieniu powita Cię prosty kreator krok po kroku:
-1. Wybór języka (Polski / English),
-2. Podłączenie konta pocztowego (automatyczne szablony: Gmail, Outlook, WP, Onet, O2, Interia, własny IMAP),
-3. Automatyczne wykrycie Ollamy i zainstalowanych modeli,
-4. Szablon reguł (Praca / Dom / Firma) oraz suwak ostrości oceny,
-5. Wybór powiadomień (pytanie głosowe lub dyskretny beep) i test głosu.
+**Gmail:** you need an *app password* (Google Account → Security → 2-step verification → App passwords). The wizard
+explains this. Use a test account first.
 
-## Uruchomienie (dev)
-
-Wymagany Python 3.12.
+## Develop
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,voice]"
-ruff check . && python -m pytest -q
-QT_QPA_PLATFORM=offscreen python -m mailvoice
+ruff check . && QT_QPA_PLATFORM=offscreen python -m pytest -q
 ```
 
-## Współpraca
+Code rules: business logic lives in `src/mailvoice/core/` with **no Qt dependency**; the UI in `ui/` has no business
+logic; voice backends sit behind Protocols so they can be faked; every function gets a test; `ruff check .` and
+`pytest` must pass before a PR. Please read [`SECURITY.md`](SECURITY.md) before touching mail handling.
 
-Chętnie przyjmiemy:
-- **zgłoszenia błędów** (Issues), szczególnie z różnymi dostawcami poczty (Gmail, Outlook, własne serwery),
-- **testy na Windowsie** (audio, mikrofon, FIDO2),
-- pomysły na funkcje i **pull requesty**.
+## Contributing
 
-Zasady dla kodu: logika w `core/` bez zależności od Qt, każda funkcja z testem, przed PR-em
-`ruff check . && python -m pytest -q` musi przejść. Nie zgłaszaj w Issues treści prywatnych maili ani haseł.
+- **Bug reports** — especially from different mail providers (folder names, encodings, `UIDVALIDITY`, OAuth quirks).
+- **Windows testing** — audio, microphone, FIDO2.
+- **Features and pull requests.**
 
-## Licencja
+⚠️ **Never paste real emails, passwords or tokens into issues.** Report security problems privately via the
+repository's *Security → Report a vulnerability* page.
 
-GPL-3.0-or-later, zobacz [`LICENSE`](LICENSE).
+## License
+
+GPL-3.0-or-later — see [`LICENSE`](LICENSE).
