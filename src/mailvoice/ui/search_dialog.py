@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from mailvoice.core.aisearch import SearchHit
 from mailvoice.core.friendly_errors import format_friendly_error
 from mailvoice.core.service import MailService
+from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
 from mailvoice.voice.tts import Speaker, VoiceUnavailable
 
@@ -103,7 +104,7 @@ class SearchDialog(QDialog):
         layout.addLayout(query_row)
 
         self.lbl_status = QLabel("")
-        self.lbl_status.setStyleSheet("color: #666; font-size: 11px; margin: 4px;")
+        self.lbl_status.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px; margin: 4px;")
         layout.addWidget(self.lbl_status)
 
         # Obszar wyników
@@ -114,7 +115,7 @@ class SearchDialog(QDialog):
         self.results_layout.setContentsMargins(4, 4, 4, 4)
 
         self.lbl_empty = QLabel(tr("search_input_placeholder"))
-        self.lbl_empty.setStyleSheet("color: #888; font-size: 12px; margin: 20px;")
+        self.lbl_empty.setStyleSheet(f"color: {theme.c('muted')}; font-size: 12px; margin: 20px;")
         self.results_layout.addWidget(self.lbl_empty)
         self.results_layout.addStretch()
 
@@ -172,7 +173,7 @@ class SearchDialog(QDialog):
 
         if not hits:
             lbl_none = QLabel(tr("search_no_results"))
-            lbl_none.setStyleSheet("color: #b02a37; font-size: 13px; margin: 20px;")
+            lbl_none.setStyleSheet(f"color: {theme.c('error')}; font-size: 13px; margin: 20px;")
             lbl_none.setWordWrap(True)
             self.results_layout.addWidget(lbl_none)
             self.results_layout.addStretch()
@@ -181,8 +182,10 @@ class SearchDialog(QDialog):
         for hit in hits:
             card = QFrame()
             card.setFrameShape(QFrame.Shape.StyledPanel)
+            card.setObjectName("card")
             card.setStyleSheet(
-                "QFrame { background-color: #f8f9fa; border: 1px solid #ced4da; "
+                f"QFrame#card {{ background-color: {theme.c('card_bg')}; "
+                f"border: 1px solid {theme.c('card_border')}; "
                 "border-radius: 6px; margin-bottom: 8px; padding: 8px; }"
             )
             card_layout = QVBoxLayout(card)
@@ -191,24 +194,17 @@ class SearchDialog(QDialog):
             header_layout = QHBoxLayout()
             title_text = f"<b>{hit.mail_ref.subject}</b>"
             lbl_title = QLabel(title_text)
-            lbl_title.setStyleSheet("font-size: 13px; color: #1c2833;")
+            lbl_title.setStyleSheet(f"font-size: 13px; color: {theme.c('text')};")
             header_layout.addWidget(lbl_title)
             header_layout.addStretch()
 
             # Odznaka pewności (badge)
             lbl_badge = QLabel()
-            if hit.confidence == "wysoka":
-                badge_text = tr("search_confidence_high")
-                bg_color = "#d1e7dd"
-                txt_color = "#0f5132"
-            elif hit.confidence == "średnia":
-                badge_text = tr("search_confidence_medium")
-                bg_color = "#fff3cd"
-                txt_color = "#664d03"
-            else:
-                badge_text = tr("search_confidence_low")
-                bg_color = "#e2e3e5"
-                txt_color = "#41464b"
+            badge_text = {
+                "wysoka": tr("search_confidence_high"),
+                "średnia": tr("search_confidence_medium"),
+            }.get(hit.confidence, tr("search_confidence_low"))
+            bg_color, txt_color = theme.badge(hit.confidence)
 
             lbl_badge.setText(f" {badge_text} ")
             lbl_badge.setStyleSheet(
@@ -226,20 +222,22 @@ class SearchDialog(QDialog):
             dt_str = hit.mail_ref.date[:10] if hit.mail_ref.date else ""
             meta_text = f"Od: {hit.mail_ref.sender} | Data: {dt_str}"
             lbl_meta = QLabel(meta_text)
-            lbl_meta.setStyleSheet("color: #6c757d; font-size: 11px;")
+            lbl_meta.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
             card_layout.addWidget(lbl_meta)
 
             # Uzasadnienie dopasowania
             if hit.why_probable:
                 lbl_why = QLabel(f"<b>{tr('search_why_probable')}</b> {hit.why_probable}")
-                lbl_why.setStyleSheet("color: #0d6efd; font-size: 12px; margin-top: 4px;")
+                lbl_why.setStyleSheet(
+                    f"color: {theme.c('link')}; font-size: 12px; margin-top: 4px;"
+                )
                 lbl_why.setWordWrap(True)
                 card_layout.addWidget(lbl_why)
 
             # Fragment treści / streszczenia
             if hit.snippet:
                 lbl_snippet = QLabel(hit.snippet)
-                lbl_snippet.setStyleSheet("color: #212529; font-size: 12px;")
+                lbl_snippet.setStyleSheet(f"color: {theme.c('text')}; font-size: 12px;")
                 lbl_snippet.setWordWrap(True)
                 card_layout.addWidget(lbl_snippet)
 

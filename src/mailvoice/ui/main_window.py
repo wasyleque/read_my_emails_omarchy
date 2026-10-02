@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Sequence
 
 import platformdirs
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -48,6 +48,7 @@ from mailvoice.core.service import (
     SuspiciousMail,
 )
 from mailvoice.core.summarizer import summarize
+from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
 from mailvoice.ui.search_dialog import SearchDialog
 from mailvoice.ui.settings import SettingsDialog
@@ -166,7 +167,9 @@ class MainWindow(QMainWindow):
         # Pasek statusu u góry
         status_bar_layout = QHBoxLayout()
         self.lbl_status = QLabel(tr("status_ready"))
-        self.lbl_status.setStyleSheet("font-size: 13px; font-weight: bold; color: #1a5fb4;")
+        self.lbl_status.setStyleSheet(
+            f"font-size: 13px; font-weight: bold; color: {theme.c('accent')};"
+        )
         status_bar_layout.addWidget(self.lbl_status)
         self._last_error_details = ""
         self.btn_error_details = QPushButton(tr("btn_details"))
@@ -176,7 +179,7 @@ class MainWindow(QMainWindow):
         status_bar_layout.addStretch()
 
         self.lbl_last_check = QLabel(f"{tr('status_last_check')} {tr('status_never')}")
-        self.lbl_last_check.setStyleSheet("color: #666; font-size: 11px;")
+        self.lbl_last_check.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         status_bar_layout.addWidget(self.lbl_last_check)
         layout.addLayout(status_bar_layout)
 
@@ -212,14 +215,21 @@ class MainWindow(QMainWindow):
         # Panel kontekstu nadawcy
         self.group_context = QGroupBox(tr("context_panel_title"))
         self.group_context.setStyleSheet(
-            "QGroupBox { font-weight: bold; margin-top: 4px; border: 1px solid #d0d7de; "
+            f"QGroupBox {{ font-weight: bold; margin-top: 4px; "
+            f"border: 1px solid {theme.c('card_border')}; "
             "border-radius: 6px; padding-top: 14px; }"
         )
+        self.group_context.setMinimumHeight(190)  # cały kontekst ma być widoczny, nie ucięty
         ctx_layout = QVBoxLayout(self.group_context)
 
         self.lbl_context_details = QLabel(tr("context_select_mail"))
         self.lbl_context_details.setWordWrap(True)
-        self.lbl_context_details.setStyleSheet("font-size: 12px; color: #333; margin: 4px;")
+        self.lbl_context_details.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+        self.lbl_context_details.setStyleSheet(
+            f"font-size: 12px; color: {theme.c('text')}; margin: 4px;"
+        )
         ctx_layout.addWidget(self.lbl_context_details)
 
         ctx_btn_row = QHBoxLayout()
@@ -300,7 +310,7 @@ class MainWindow(QMainWindow):
         ctrl_layout.addWidget(self.btn_refresh_digest)
 
         self.lbl_digest_status = QLabel("")
-        self.lbl_digest_status.setStyleSheet("color: #666; font-size: 11px;")
+        self.lbl_digest_status.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         ctrl_layout.addWidget(self.lbl_digest_status)
         ctrl_layout.addStretch()
         layout.addLayout(ctrl_layout)
@@ -313,7 +323,7 @@ class MainWindow(QMainWindow):
         self.digest_layout.setContentsMargins(4, 4, 4, 4)
 
         lbl_init = QLabel(tr("digest_empty"))
-        lbl_init.setStyleSheet("color: #666; font-size: 13px; margin: 20px;")
+        lbl_init.setStyleSheet(f"color: {theme.c('muted')}; font-size: 13px; margin: 20px;")
         self.digest_layout.addWidget(lbl_init)
         self.digest_layout.addStretch()
 
@@ -499,7 +509,7 @@ class MainWindow(QMainWindow):
             if self.service:
                 self.service.user_dismiss()
             self.btn_mute.setText(tr("btn_unmute"))
-            self.btn_mute.setStyleSheet("background-color: #ffd8a8;")
+            self.btn_mute.setStyleSheet(f"background-color: {theme.c('mute_bg')};")
         else:
             self.btn_mute.setText(tr("btn_mute"))
             self.btn_mute.setStyleSheet("")
@@ -608,9 +618,10 @@ class MainWindow(QMainWindow):
         self.current_context_card = card
         safe_sender = html.escape(defang_url(sender))
         if card is None:
+            muted = theme.c("muted")
             self.lbl_context_details.setText(
-                f"<span style='color: #666;'>{tr('context_unknown_sender')}</span><br>"
-                f"<span style='font-size: 11px; color: #888;'>Adres: {safe_sender}</span>"
+                f"<span style='color: {muted};'>{tr('context_unknown_sender')}</span><br>"
+                f"<span style='font-size: 11px; color: {muted};'>Adres: {safe_sender}</span>"
             )
             self.btn_context_search.setText(tr("btn_search_ai"))
             self.btn_context_search.setEnabled(True)
@@ -619,7 +630,7 @@ class MainWindow(QMainWindow):
         safe_name = html.escape(card.name)
         safe_addrs = html.escape(", ".join(defang_url(a) for a in card.addresses))
         lines = [
-            f"<b>{safe_name}</b> <span style='color: #666;'>({safe_addrs})</span>",
+            f"<b>{safe_name}</b> <span style='color: {theme.c('muted')};'>({safe_addrs})</span>",
         ]
         if card.relationship_hint:
             safe_hint = html.escape(defang_url(card.relationship_hint))
@@ -637,7 +648,8 @@ class MainWindow(QMainWindow):
             lines.append(f"<b>{tr('context_last_exchange')}</b> {safe_dt}: {safe_st}")
 
         self.lbl_context_details.setText("<br>".join(lines))
-        self.btn_context_search.setText(f"{tr('btn_search_ai')} ({safe_name})")
+        self.btn_context_search.setText(tr("btn_search_ai"))
+        self.btn_context_search.setToolTip(card.name)
         self.btn_context_search.setEnabled(True)
 
     def _on_context_search_clicked(self) -> None:
@@ -698,7 +710,7 @@ class MainWindow(QMainWindow):
 
         if not digest.topics:
             lbl_empty = QLabel(tr("digest_empty"))
-            lbl_empty.setStyleSheet("color: #666; font-size: 13px; margin: 20px;")
+            lbl_empty.setStyleSheet(f"color: {theme.c('muted')}; font-size: 13px; margin: 20px;")
             self.digest_layout.addWidget(lbl_empty)
             self.digest_layout.addStretch()
             return
@@ -707,16 +719,16 @@ class MainWindow(QMainWindow):
         waiting_others = [t for t in digest.topics if t.status == "oczekuje_na_innych"]
         info_topics = [t for t in digest.topics if t.status in ("informacyjne", "zamknięte")]
 
-        self._add_digest_group(tr("digest_group_waiting_me"), waiting_me, border_color="#1a5fb4")
         self._add_digest_group(
-            tr("digest_group_waiting_others"), waiting_others, border_color="#e5a50a"
+            tr("digest_group_waiting_me"), waiting_me, border_color=theme.c("accent")
         )
-        self._add_digest_group(tr("digest_group_info"), info_topics, border_color="#9a9996")
+        self._add_digest_group(
+            tr("digest_group_waiting_others"), waiting_others, border_color=theme.c("warn")
+        )
+        self._add_digest_group(tr("digest_group_info"), info_topics, border_color=theme.c("muted"))
         self.digest_layout.addStretch()
 
-    def _add_digest_group(
-        self, title: str, topics: list[Topic], border_color: str = "#ccc"
-    ) -> None:
+    def _add_digest_group(self, title: str, topics: list[Topic], border_color: str = "") -> None:
         """Dodaje sekcję grupującą karty tematów."""
         group = QGroupBox(f"{title} ({len(topics)})")
         group.setStyleSheet(
@@ -727,14 +739,16 @@ class MainWindow(QMainWindow):
 
         if not topics:
             lbl_none = QLabel(tr("digest_no_topics_in_group"))
-            lbl_none.setStyleSheet("color: #888; font-size: 11px; margin: 4px;")
+            lbl_none.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px; margin: 4px;")
             grp_layout.addWidget(lbl_none)
         else:
             for topic in topics:
                 card = QFrame()
                 card.setFrameShape(QFrame.Shape.StyledPanel)
+                card.setObjectName("card")
                 card.setStyleSheet(
-                    "QFrame { background-color: #f6f8fa; border: 1px solid #d0d7de; "
+                    f"QFrame#card {{ background-color: {theme.c('card_bg')}; "
+                    f"border: 1px solid {theme.c('card_border')}; "
                     "border-radius: 6px; margin-bottom: 6px; padding: 6px; }"
                 )
                 card_layout = QVBoxLayout(card)
@@ -742,7 +756,9 @@ class MainWindow(QMainWindow):
 
                 header_layout = QHBoxLayout()
                 lbl_title = QLabel(topic.title)
-                lbl_title.setStyleSheet("font-weight: bold; font-size: 13px; color: #24292f;")
+                lbl_title.setStyleSheet(
+                    f"font-weight: bold; font-size: 13px; color: {theme.c('text')};"
+                )
                 header_layout.addWidget(lbl_title)
                 header_layout.addStretch()
 
@@ -754,12 +770,12 @@ class MainWindow(QMainWindow):
                 if topic.who_to_whom:
                     w2w_text = "; ".join(topic.who_to_whom)
                     lbl_w2w = QLabel(f"<b>{tr('digest_who_to_whom')}:</b> {w2w_text}")
-                    lbl_w2w.setStyleSheet("color: #57606a; font-size: 11px;")
+                    lbl_w2w.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
                     card_layout.addWidget(lbl_w2w)
 
                 if topic.why:
                     lbl_why = QLabel(f"<b>{tr('col_reason')}:</b> {topic.why}")
-                    lbl_why.setStyleSheet("color: #24292f; font-size: 12px;")
+                    lbl_why.setStyleSheet(f"color: {theme.c('text')}; font-size: 12px;")
                     card_layout.addWidget(lbl_why)
 
                 grp_layout.addWidget(card)

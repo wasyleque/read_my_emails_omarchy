@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, save_config
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
+from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
 from mailvoice.ui.wizard import ImapTestWorker
 from mailvoice.voice.tts import FakeSpeaker, PiperSpeaker, Speaker, VoiceUnavailable
@@ -128,7 +129,7 @@ class SettingsDialog(QDialog):
 
         self.lbl_help = QLabel()
         self.lbl_help.setWordWrap(True)
-        self.lbl_help.setStyleSheet("color: #666; font-size: 11px;")
+        self.lbl_help.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         layout.addWidget(self.lbl_help)
 
         # Przycisk sprawdzania połączenia i etykieta wyniku
@@ -372,7 +373,7 @@ class SettingsDialog(QDialog):
         self.btn_test.setEnabled(False)
         self.btn_details.setVisible(False)
         self.txt_details.setVisible(False)
-        self.lbl_test_result.setStyleSheet("color: blue;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('accent')};")
         self.lbl_test_result.setText(tr("step2_test_testing"))
 
         self.worker = ImapTestWorker(
@@ -389,14 +390,14 @@ class SettingsDialog(QDialog):
 
     def _on_test_ok(self) -> None:
         self.btn_test.setEnabled(True)
-        self.lbl_test_result.setStyleSheet("color: green; font-weight: bold;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('ok')}; font-weight: bold;")
         self.lbl_test_result.setText(tr("step2_test_ok"))
         self.btn_details.setVisible(False)
         self.txt_details.setVisible(False)
 
     def _on_test_error(self, message: str, details: str = "") -> None:
         self.btn_test.setEnabled(True)
-        self.lbl_test_result.setStyleSheet("color: red;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('error')};")
         self.lbl_test_result.setText(message)
         if details:
             self.txt_details.setPlainText(details)
@@ -432,15 +433,15 @@ class SettingsDialog(QDialog):
         try:
             speaker = PiperSpeaker() if not isinstance(self.speaker, FakeSpeaker) else self.speaker
             speaker.speak(text, lang=lang)
-            self.lbl_voice_status.setStyleSheet("color: green;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('ok')};")
             self.lbl_voice_status.setText(
                 "Odtwarzanie próbki głosu..." if lang == "pl" else "Playing sample voice..."
             )
         except VoiceUnavailable as exc:
-            self.lbl_voice_status.setStyleSheet("color: #b85d00;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('warn')};")
             self.lbl_voice_status.setText(str(exc))
         except Exception as exc:
-            self.lbl_voice_status.setStyleSheet("color: red;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('error')};")
             self.lbl_voice_status.setText(str(exc))
 
     def _on_save(self) -> None:

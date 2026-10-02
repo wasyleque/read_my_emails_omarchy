@@ -32,6 +32,7 @@ from mailvoice.core.imap_fetch import ImapToolsClient
 from mailvoice.core.ollama_models import suggest_models
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
+from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, set_language, tr
 from mailvoice.voice.tts import FakeSpeaker, PiperSpeaker, Speaker, VoiceUnavailable
 
@@ -157,7 +158,7 @@ class AccountPage(QWizardPage):
         # Podpowiedź dla dostawcy (np. hasło aplikacji Gmail)
         self.lbl_help = QLabel()
         self.lbl_help.setWordWrap(True)
-        self.lbl_help.setStyleSheet("color: #666; font-size: 11px;")
+        self.lbl_help.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         layout.addWidget(self.lbl_help)
 
         # Przycisk sprawdzania połączenia i etykieta wyniku
@@ -241,7 +242,7 @@ class AccountPage(QWizardPage):
         self.btn_test.setEnabled(False)
         self.btn_details.setVisible(False)
         self.txt_details.setVisible(False)
-        self.lbl_test_result.setStyleSheet("color: blue;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('accent')};")
         self.lbl_test_result.setText(tr("step2_test_testing"))
 
         self.worker = ImapTestWorker(
@@ -258,14 +259,14 @@ class AccountPage(QWizardPage):
 
     def _on_test_ok(self) -> None:
         self.btn_test.setEnabled(True)
-        self.lbl_test_result.setStyleSheet("color: green; font-weight: bold;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('ok')}; font-weight: bold;")
         self.lbl_test_result.setText(tr("step2_test_ok"))
         self.btn_details.setVisible(False)
         self.txt_details.setVisible(False)
 
     def _on_test_error(self, message: str, details: str = "") -> None:
         self.btn_test.setEnabled(True)
-        self.lbl_test_result.setStyleSheet("color: red;")
+        self.lbl_test_result.setStyleSheet(f"color: {theme.c('error')};")
         self.lbl_test_result.setText(message)
         if details:
             self.txt_details.setPlainText(details)
@@ -338,7 +339,9 @@ class OllamaPage(QWizardPage):
 
         self.lbl_guide = QLabel(tr("step3_install_guide"))
         self.lbl_guide.setWordWrap(True)
-        self.lbl_guide.setStyleSheet("color: #555; background: #eee; padding: 8px;")
+        self.lbl_guide.setStyleSheet(
+            f"color: {theme.c('text')}; background: {theme.c('guide_bg')}; padding: 8px;"
+        )
         layout.addWidget(self.lbl_guide)
 
         # Zaawansowane (URL)
@@ -368,13 +371,13 @@ class OllamaPage(QWizardPage):
 
         self.cb_model.clear()
         if self._suggestion.choices:
-            self.lbl_status.setStyleSheet("color: green; font-weight: bold;")
+            self.lbl_status.setStyleSheet(f"color: {theme.c('ok')}; font-weight: bold;")
             self.lbl_status.setText(tr("step3_detected"))
             self.lbl_guide.setVisible(False)
             for m in self._suggestion.choices:
                 self.cb_model.addItem(m)  # zalecane na górze; tylko zainstalowane, bez chmurowych
         else:
-            self.lbl_status.setStyleSheet("color: #b85d00; font-weight: bold;")
+            self.lbl_status.setStyleSheet(f"color: {theme.c('warn')}; font-weight: bold;")
             self.lbl_status.setText(tr("step3_not_detected"))
             self.lbl_guide.setVisible(True)
             self.adv_group.setChecked(True)  # pokaż pole adresu serwera, żeby można było go wpisać
@@ -587,15 +590,15 @@ class VoicePage(QWizardPage):
             # Używamy faktycznego głośnika lub PiperSpeaker jeśli dostępny
             speaker = PiperSpeaker() if not isinstance(self.speaker, FakeSpeaker) else self.speaker
             speaker.speak(text, lang=lang)
-            self.lbl_voice_status.setStyleSheet("color: green;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('ok')};")
             self.lbl_voice_status.setText(
                 "Odtwarzanie próbki głosu..." if lang == "pl" else "Playing sample voice..."
             )
         except VoiceUnavailable as exc:
-            self.lbl_voice_status.setStyleSheet("color: #b85d00;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('warn')};")
             self.lbl_voice_status.setText(str(exc))
         except Exception as exc:
-            self.lbl_voice_status.setStyleSheet("color: red;")
+            self.lbl_voice_status.setStyleSheet(f"color: {theme.c('error')};")
             self.lbl_voice_status.setText(str(exc))
 
     def get_interval_minutes(self) -> int:
