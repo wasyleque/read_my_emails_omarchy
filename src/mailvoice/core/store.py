@@ -242,6 +242,22 @@ class Store:
                 "ALTER TABLE mail_index ADD COLUMN risk_reasons TEXT NOT NULL DEFAULT ''"
             )
 
+        # Tabela sparowanych urządzeń mobilnych (Android)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS paired_devices (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash
+            ON paired_devices(token_hash)
+        """)
+
         self.connection.commit()
 
     def get_last_uid(self, account: str, folder: str, uidvalidity: int) -> int:
@@ -320,7 +336,15 @@ class Store:
         importance: Optional[int] = None,
     ) -> None:
         # Validate status
-        allowed_statuses = {"new", "analyzed", "backlog_declined", "failed", "backlog_pending"}
+        allowed_statuses = {
+            "new",
+            "analyzed",
+            "backlog_declined",
+            "failed",
+            "backlog_pending",
+            "listened",
+            "acknowledged",
+        }
         if status not in allowed_statuses:
             raise ValueError(f"Invalid status '{status}'. Must be one of {allowed_statuses}")
 
@@ -500,6 +524,27 @@ class Store:
         if not row:
             return None
         return MailIndexRecord(*row)
+
+    def get_important_indexed_records(
+        self,
+        min_importance: int = 6,
+        limit: int = 50,
+    ) -> list[MailIndexRecord]:
+        """Zwraca ważne wiadomości przychodzące z indeksu (posortowane od najnowszych)."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT account, folder, uidvalidity, uid, message_id, thread_key,
+                   date, sender, recipients, subject, importance, why, summary, direction,
+                   risk, risk_reasons
+            FROM mail_index
+            WHERE direction = 'in' AND importance >= ?
+            ORDER BY date DESC, uid DESC
+            LIMIT ?
+            """,
+            (min_importance, limit),
+        )
+        return [MailIndexRecord(*row) for row in cursor.fetchall()]
 
     def get_records_for_thread(self, thread_key: str) -> list[MailIndexRecord]:
         """Zwraca wszystkie wiadomości powiązane z danym wątkiem, posortowane chronologicznie."""

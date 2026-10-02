@@ -230,6 +230,29 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "btn_details": "Szczegóły techniczne",
         "btn_hide_details": "Ukryj szczegóły",
+        # Mobile server & pairing
+        "tab_mobile": "Telefon (Android)",
+        "mobile_enable_label": "Włącz połączenie z telefonem",
+        "mobile_warning": (
+            "Działa tylko w Twojej sieci domowej/firmowej. "
+            "Telefon zobaczy streszczenia ważnych maili, nie całe wiadomości."
+        ),
+        "mobile_status_listening": "Nasłuchuję na: {url}",
+        "mobile_status_disabled": "Połączenie z telefonem jest wyłączone.",
+        "mobile_status_no_lan": "Brak aktywnego połączenia z siecią lokalną (Wi-Fi/LAN).",
+        "btn_pair_device": "Sparuj nowy telefon",
+        "pair_dialog_title": "Parowanie telefonu",
+        "pair_dialog_instructions": "Zeskanuj kod QR aplikacją MailVoice na telefonie:",
+        "pair_code_alt_label": "Lub wpisz kod ręcznie w aplikacji:",
+        "pair_time_remaining": "Czas na sparowanie: {seconds} s",
+        "pair_expired": "Czas na sparowanie minął. Wygeneruj nowy kod.",
+        "paired_devices_title": "Sparowane telefony:",
+        "btn_revoke_device": "Odłącz",
+        "revoke_device_confirm": "Czy na pewno chcesz odłączyć telefon „{name}”?",
+        "no_paired_devices": "Brak sparowanych telefonów.",
+        "main_mobile_indicator": "📱 telefon: {count} urządzeń",
+        "main_mobile_indicator_one": "📱 telefon: 1 urządzenie",
+        "main_mobile_indicator_active": "📱 telefon: włączony",
     },
     "en": {
         # Wizard
@@ -452,6 +475,29 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "btn_details": "Technical details",
         "btn_hide_details": "Hide details",
+        # Mobile server & pairing
+        "tab_mobile": "Phone (Android)",
+        "mobile_enable_label": "Enable connection with phone",
+        "mobile_warning": (
+            "Works only in your local home/work network. "
+            "The phone receives summaries of important emails, not full messages."
+        ),
+        "mobile_status_listening": "Listening on: {url}",
+        "mobile_status_disabled": "Connection with phone is disabled.",
+        "mobile_status_no_lan": "No active local network connection (Wi-Fi/LAN).",
+        "btn_pair_device": "Pair new phone",
+        "pair_dialog_title": "Pairing Phone",
+        "pair_dialog_instructions": "Scan this QR code with the MailVoice app on your phone:",
+        "pair_code_alt_label": "Or enter this code manually in the app:",
+        "pair_time_remaining": "Time remaining: {seconds} s",
+        "pair_expired": "Pairing session expired. Please generate a new code.",
+        "paired_devices_title": "Paired phones:",
+        "btn_revoke_device": "Disconnect",
+        "revoke_device_confirm": "Are you sure you want to disconnect phone '{name}'?",
+        "no_paired_devices": "No paired phones.",
+        "main_mobile_indicator": "📱 phone: {count} devices",
+        "main_mobile_indicator_one": "📱 phone: 1 device",
+        "main_mobile_indicator_active": "📱 phone: active",
     },
 }
 

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from mailvoice.core.config import AppConfig, save_config
 from mailvoice.core.contacts import ContactCard
+from mailvoice.core.devices import DeviceManager
 from mailvoice.core.digest import Digest, Topic
 from mailvoice.core.friendly_errors import format_friendly_error
 from mailvoice.core.phishing import defang_url
@@ -48,6 +49,7 @@ from mailvoice.core.service import (
     SuspiciousMail,
 )
 from mailvoice.core.summarizer import summarize
+from mailvoice.server.server import MobileServer
 from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
 from mailvoice.ui.search_dialog import SearchDialog
@@ -135,6 +137,13 @@ class MainWindow(QMainWindow):
         self.config_path = config_path or (
             Path(platformdirs.user_config_dir("mailvoice")) / "config.json"
         )
+        self.data_dir = (
+            self.config_path.parent
+            if self.config_path
+            else Path(platformdirs.user_data_dir("mailvoice"))
+        )
+        self.device_manager = DeviceManager(self.data_dir / "mailvoice.db")
+        self.mobile_server: MobileServer | None = None
         self.speaker = speaker
         self.beeper = beeper
         self.voice_dialog = voice_dialog
@@ -159,6 +168,7 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._init_tray()
         self._init_timer()
+        self._update_mobile_server()
         if self.service and not self.service.config.accounts:
             self.lbl_status.setText(tr("status_no_accounts"))
 
@@ -179,6 +189,13 @@ class MainWindow(QMainWindow):
         self.btn_error_details.clicked.connect(self._show_error_details)
         status_bar_layout.addWidget(self.btn_error_details)
         status_bar_layout.addStretch()
+
+        self.lbl_mobile_indicator = QLabel("")
+        self.lbl_mobile_indicator.setStyleSheet(
+            f"font-size: 11px; font-weight: bold; color: {theme.c('ok')};"
+        )
+        self.lbl_mobile_indicator.setVisible(False)
+        status_bar_layout.addWidget(self.lbl_mobile_indicator)
 
         self.lbl_last_check = QLabel(f"{tr('status_last_check')} {tr('status_never')}")
         self.lbl_last_check.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
@@ -538,6 +555,8 @@ class MainWindow(QMainWindow):
             secret_store=self.service.secret_store,
             speaker=self.speaker,
             on_config_saved=self._on_config_updated,
+            device_manager=self.device_manager,
+            data_dir=self.data_dir,
             parent=self,
         )
         dlg.exec()
@@ -546,11 +565,52 @@ class MainWindow(QMainWindow):
         if self.service:
             self.service.update_config(new_config)
             save_config(new_config, self.config_path)
+            self._update_mobile_server()
             self.tbl_mails.setColumnHidden(3, len(new_config.accounts) <= 1)
             if not new_config.accounts:
                 self.lbl_status.setText(tr("status_no_accounts"))
             elif self.lbl_status.text() == tr("status_no_accounts"):
                 self.lbl_status.setText(tr("status_ready"))
+
+    def _update_mobile_server(self) -> None:
+        """Uruchamia, zatrzymuje serwer mobilny oraz aktualizuje wskaźnik w pasku statusu."""
+        if not self.service:
+            return
+
+        server_cfg = self.service.config.server
+        if server_cfg.enabled:
+            if self.mobile_server is None:
+                self.mobile_server = MobileServer(
+                    config=self.service.config,
+                    store=self.service.store,
+                    device_manager=self.device_manager,
+                    service=self.service,
+                    data_dir=self.data_dir,
+                )
+                self.service.add_listener(self.mobile_server.broadcast_event)
+                try:
+                    self.mobile_server.start()
+                except Exception:
+                    pass
+
+            if self.mobile_server and self.mobile_server.is_running:
+                devices = self.device_manager.list_devices(include_revoked=False)
+                count = len(devices)
+                if count == 1:
+                    text = tr("main_mobile_indicator_one")
+                elif count > 1:
+                    text = tr("main_mobile_indicator", count=count)
+                else:
+                    text = tr("main_mobile_indicator_active")
+                self.lbl_mobile_indicator.setText(text)
+                self.lbl_mobile_indicator.setVisible(True)
+            else:
+                self.lbl_mobile_indicator.setVisible(False)
+        else:
+            if self.mobile_server is not None:
+                self.mobile_server.stop()
+                self.mobile_server = None
+            self.lbl_mobile_indicator.setVisible(False)
 
     def _on_service_event(self, event: Event) -> None:
         """Odbiera zdarzenie z wątku serwisu i emituje sygnał do GUI."""
@@ -853,6 +913,9 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _quit_application(self) -> None:
+        if self.mobile_server:
+            self.mobile_server.stop()
+            self.mobile_server = None
         if self.tray_icon:
             self.tray_icon.hide()
         self.close()
@@ -863,4 +926,7 @@ class MainWindow(QMainWindow):
             self.hide()
             event.ignore()
         else:
+            if self.mobile_server:
+                self.mobile_server.stop()
+                self.mobile_server = None
             event.accept()

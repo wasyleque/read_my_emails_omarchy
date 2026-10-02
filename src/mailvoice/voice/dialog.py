@@ -137,6 +137,9 @@ def classify_command(text: str | None) -> VoiceCommand:
         "sure",
         "ok",
         "dobrze",
+        "czytaj",
+        "przeczytaj",
+        "read",
     }
     if words & yes_words:
         return VoiceCommand.YES

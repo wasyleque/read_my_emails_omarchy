@@ -26,6 +26,10 @@ dev = [
 fido2 = [
     "fido2>=1.1",
 ]
+server = [
+    "aiohttp>=3.9",
+    "segno>=1.6",
+]
 voice = [
     "faster-whisper>=1.0.0",
     "sounddevice>=0.4.6",
@@ -35,6 +39,7 @@ voice = [
 
 [project.scripts]
 mailvoice = "mailvoice.__main__:main"
+mailvoice-server = "mailvoice.headless:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

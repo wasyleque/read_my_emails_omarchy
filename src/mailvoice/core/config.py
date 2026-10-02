@@ -26,6 +26,14 @@ class OllamaConfig:
 
 
 @dataclass
+class ServerConfig:
+    enabled: bool = False
+    port: int = 8765
+    bind: str = ""  # "" = auto-wykrycie adresu LAN
+    max_devices: int = 5
+
+
+@dataclass
 class AppConfig:
     accounts: List[AccountConfig] = field(default_factory=list)
     analysis_prompt: str = ""
@@ -43,6 +51,7 @@ class AppConfig:
     digest_days: int = 30
     my_addresses: List[str] = field(default_factory=list)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
 
     def to_dict(self) -> dict:
         """Convert AppConfig to dictionary representation."""
@@ -50,7 +59,7 @@ class AppConfig:
         for key, value in self.__dict__.items():
             if key == "accounts":
                 result[key] = [account.__dict__ for account in value]
-            elif key == "ollama":
+            elif key in ("ollama", "server"):
                 result[key] = value.__dict__
             else:
                 result[key] = value
@@ -72,7 +81,17 @@ class AppConfig:
             known = OllamaConfig.__dataclass_fields__
             ollama = OllamaConfig(**{k: v for k, v in d["ollama"].items() if k in known})
 
+        server = ServerConfig()
+        if "server" in d and isinstance(d["server"], dict):
+            known_srv = ServerConfig.__dataclass_fields__
+            server = ServerConfig(**{k: v for k, v in d["server"].items() if k in known_srv})
+
         # Handle validation
+        if not (1 <= server.port <= 65535):
+            raise ValueError(f"Server port must be between 1 and 65535, got: {server.port}")
+        if server.max_devices < 1:
+            raise ValueError(f"Server max_devices must be >= 1, got: {server.max_devices}")
+
         notify_mode = d.get("notify_mode", "beep")
         if notify_mode not in ("beep", "ask"):
             raise ValueError(f"Invalid notify_mode: {notify_mode}")
@@ -126,6 +145,7 @@ class AppConfig:
             digest_days=digest_days,
             my_addresses=my_addresses,
             ollama=ollama,
+            server=server,
         )
 
 

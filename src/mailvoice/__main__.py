@@ -48,6 +48,11 @@ def get_secret_store() -> SecretStore:
 def main() -> int:
     """Główna funkcja uruchamiająca aplikację MailVoice (z zapisem błędów do logu)."""
     crashlog.install()
+    if "--headless" in sys.argv:
+        from mailvoice.headless import run_headless
+
+        return run_headless()
+
     try:
         return _run()
     except Exception:  # noqa: BLE001 — błąd startu ma trafić do logu i do okna

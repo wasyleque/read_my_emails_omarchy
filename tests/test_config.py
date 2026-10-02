@@ -302,3 +302,47 @@ def test_ask_retry_minutes_validation():
     # Niepoprawna wartość < 1
     with pytest.raises(ValueError, match="Ask retry minutes must be >= 1"):
         AppConfig.from_dict({"ask_retry_minutes": 0})
+
+
+def test_server_config_defaults_and_validation():
+    """Weryfikuje domyślne wartości, serializację i walidację ServerConfig."""
+
+    # Domyślne wartości
+    cfg_def = AppConfig()
+    assert cfg_def.server.enabled is False
+    assert cfg_def.server.port == 8765
+    assert cfg_def.server.bind == ""
+    assert cfg_def.server.max_devices == 5
+
+    # Wczytanie ze słownika bez klucza "server" (migracja starych baz)
+    loaded_legacy = AppConfig.from_dict({})
+    assert loaded_legacy.server.enabled is False
+
+    # Niestandardowe wartości i round-trip
+    custom_dict = {
+        "server": {
+            "enabled": True,
+            "port": 9000,
+            "bind": "192.168.1.100",
+            "max_devices": 10,
+        }
+    }
+    cfg_custom = AppConfig.from_dict(custom_dict)
+    assert cfg_custom.server.enabled is True
+    assert cfg_custom.server.port == 9000
+    assert cfg_custom.server.bind == "192.168.1.100"
+    assert cfg_custom.server.max_devices == 10
+
+    roundtrip = AppConfig.from_dict(cfg_custom.to_dict())
+    assert roundtrip.server == cfg_custom.server
+
+    # Błędny port
+    with pytest.raises(ValueError, match="Server port must be between 1 and 65535"):
+        AppConfig.from_dict({"server": {"port": 0}})
+
+    with pytest.raises(ValueError, match="Server port must be between 1 and 65535"):
+        AppConfig.from_dict({"server": {"port": 70000}})
+
+    # Błędna liczba urządzeń
+    with pytest.raises(ValueError, match="Server max_devices must be >= 1"):
+        AppConfig.from_dict({"server": {"max_devices": 0}})

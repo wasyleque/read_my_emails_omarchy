@@ -62,6 +62,17 @@ prywatne (RFC1918/link-local, własna podsieć /24 i znane hosty), tylko port Ol
 liczba równoległych połączeń, potwierdzenie rozpoznania odpowiedzią `/api/tags`. Nigdy nie skanuje adresów publicznych.
 Użytkownik musi potwierdzić znaleziony serwer przed zapisaniem; ostrzeż, że Ollama w LAN zwykle nie ma uwierzytelniania.
 
+## Serwer dla aplikacji mobilnej (Android)
+Komputer udostępnia lokalny serwer HTTPS/WebSocket dla aplikacji telefonu. Obowiązują nienaruszalne zasady:
+1. **Domyślnie wyłączony:** Serwer mobilny jest nieaktywny dopóki użytkownik świadomie nie włączy go w Ustawieniach.
+2. **Tylko sieć lokalna (LAN):** Nasłuch odbywa się wyłącznie na interfejsie LAN (Wi-Fi) lub localhost. Brak połączeń wychodzących do chmury, brak pośredników relay. Dostęp spoza sieci domowej/firmowej dozwolony wyłącznie przez własny tunel VPN użytkownika (np. WireGuard, Tailscale).
+3. **TLS i przypięty odcisk (Certificate Pinning):** Połączenie szyfrowane samopodpisanym certyfikatem ECDSA P-256. Podczas parowania kod QR przekazuje 64-znakowy odcisk SHA-256 certyfikatu, który aplikacja mobilna bezwzględnie weryfikuje i przypina.
+4. **Jednorazowe parowanie:** Kod parowania ważny jest przez 120 sekund i unieważniany natychmiast po pierwszym użyciu. Po 5 nieudanych próbach następuje blokada sesji parowania.
+5. **Kryptograficzne tokeny w bazie:** Telefon autoryzuje się 32-bajtowym losowym tokenem Bearer. W bazie danych serwera zapisywany jest wyłącznie hash SHA-256 tokenu. Weryfikacja następuje w stałym czasie (`hmac.compare_digest`).
+6. **Zero surowych treści i załączników:** Telefon otrzymuje jedynie metadane i krótkie streszczenia (max 4 zdania) z usuniętymi/zdefangowanymi linkami (`[link pominięty]`). Żadna surowa treść maila ani plik załącznika nigdy nie trafia do telefonu.
+7. **Izolacja wiadomości podejrzanych:** Wiadomości oznaczone jako podejrzenie phishingu/malware mają zablokowane streszczenie — telefon otrzymuje tylko ostrzeżenie i powody ryzyka.
+8. **Odwoływanie urządzeń:** Użytkownik w każdej chwili może odłączyć sparowany telefon z poziomu komputera (w Ustawieniach) lub z telefonu (`DELETE /v1/devices/self`). Odwołany token jest natychmiast trwale unieważniany.
+
 ## Zgłaszanie luk
 Zgłoś prywatnie przez GitHub Security Advisories (zakładka Security repozytorium). Nie umieszczaj w publicznych issues
 prawdziwych maili ani danych.

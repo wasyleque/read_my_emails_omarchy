@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+import platformdirs
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -27,7 +28,8 @@ from PySide6.QtWidgets import (
 )
 
 from mailvoice.core.analyzer import OllamaClient
-from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, save_config
+from mailvoice.core.config import AccountConfig, AppConfig, OllamaConfig, ServerConfig, save_config
+from mailvoice.core.devices import DeviceManager
 from mailvoice.core.ollama_models import (
     CheckResult,
     Detection,
@@ -39,8 +41,10 @@ from mailvoice.core.ollama_models import (
 )
 from mailvoice.core.providers import get_provider_by_id, get_providers
 from mailvoice.core.secrets import SecretStore
+from mailvoice.core.tls import detect_lan_ip
 from mailvoice.ui import theme
 from mailvoice.ui.i18n import get_language, tr
+from mailvoice.ui.pairing_dialog import PairingDialog
 from mailvoice.ui.wizard import ImapTestWorker
 from mailvoice.voice.tts import FakeSpeaker, PiperSpeaker, Speaker, VoiceUnavailable
 
@@ -142,6 +146,8 @@ class SettingsDialog(QDialog):
         secret_store: SecretStore,
         speaker: Speaker | None = None,
         on_config_saved: Callable[[AppConfig], None] | None = None,
+        device_manager: DeviceManager | None = None,
+        data_dir: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -150,6 +156,12 @@ class SettingsDialog(QDialog):
         self.secret_store = secret_store
         self.speaker = speaker or FakeSpeaker()
         self.on_config_saved = on_config_saved
+        self.data_dir = data_dir or (
+            self.config_path.parent
+            if self.config_path
+            else Path(platformdirs.user_data_dir("mailvoice"))
+        )
+        self.device_manager = device_manager or DeviceManager(self.data_dir / "mailvoice.db")
         self.worker: ImapTestWorker | None = None
         self.account_drafts: list[AccountDraft] = []
         self.deleted_account_names: list[str] = []
@@ -191,6 +203,11 @@ class SettingsDialog(QDialog):
         self.tab_ollama = QWidget()
         self._init_ollama_tab()
         self.tabs.addTab(self.tab_ollama, tr("tab_ollama"))
+
+        # Zakładka 5: Telefon (Android)
+        self.tab_mobile = QWidget()
+        self._init_mobile_tab()
+        self.tabs.addTab(self.tab_mobile, tr("tab_mobile"))
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -533,6 +550,141 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.adv_ollama)
         layout.addStretch()
 
+    def _init_mobile_tab(self) -> None:
+        layout = QVBoxLayout(self.tab_mobile)
+        layout.setSpacing(12)
+
+        # 1. Przełącznik włączenia serwera
+        self.cb_server_enabled = QCheckBox(tr("mobile_enable_label"))
+        self.cb_server_enabled.setStyleSheet("font-size: 13px; font-weight: bold;")
+        self.cb_server_enabled.toggled.connect(self._on_server_enabled_toggled)
+        layout.addWidget(self.cb_server_enabled)
+
+        # 2. Ostrzeżenie po ludzku
+        lbl_warning = QLabel(tr("mobile_warning"))
+        lbl_warning.setWordWrap(True)
+        lbl_warning.setStyleSheet(
+            f"color: {theme.c('muted')}; font-style: italic; font-size: 11px;"
+        )
+        layout.addWidget(lbl_warning)
+
+        # 3. Status serwera
+        self.lbl_server_status = QLabel("")
+        self.lbl_server_status.setWordWrap(True)
+        layout.addWidget(self.lbl_server_status)
+
+        # 4. Przycisk parowania nowego telefonu
+        pair_row = QHBoxLayout()
+        self.btn_pair = QPushButton(tr("btn_pair_device"))
+        self.btn_pair.clicked.connect(self._on_pair_device)
+        pair_row.addWidget(self.btn_pair)
+        pair_row.addStretch()
+        layout.addLayout(pair_row)
+
+        layout.addSpacing(10)
+
+        # 5. Lista sparowanych urządzeń
+        lbl_devices = QLabel(tr("paired_devices_title"))
+        lbl_devices.setStyleSheet("font-weight: bold;")
+        layout.addWidget(lbl_devices)
+
+        self.list_devices = QListWidget()
+        self.list_devices.currentRowChanged.connect(self._on_device_selection_changed)
+        layout.addWidget(self.list_devices)
+
+        # 6. Przycisk Odłącz urządzenie
+        btn_dev_row = QHBoxLayout()
+        self.btn_revoke_device = QPushButton(tr("btn_revoke_device"))
+        self.btn_revoke_device.clicked.connect(self._on_revoke_device)
+        self.btn_revoke_device.setEnabled(False)
+        btn_dev_row.addWidget(self.btn_revoke_device)
+        btn_dev_row.addStretch()
+        layout.addLayout(btn_dev_row)
+
+        layout.addStretch()
+
+    def _on_server_enabled_toggled(self, enabled: bool) -> None:
+        self._update_server_status_ui(enabled)
+
+    def _update_server_status_ui(self, enabled: bool | None = None) -> None:
+        if enabled is None:
+            enabled = self.cb_server_enabled.isChecked()
+
+        lan_ip = (
+            self.config.server.bind
+            if (self.config.server.bind and self.config.server.bind != "0.0.0.0")
+            else detect_lan_ip()
+        )
+
+        if enabled:
+            if lan_ip:
+                url = f"https://{lan_ip}:{self.config.server.port}"
+                self.lbl_server_status.setText(tr("mobile_status_listening", url=url))
+                self.lbl_server_status.setStyleSheet(f"color: {theme.c('ok')}; font-weight: bold;")
+                self.btn_pair.setEnabled(True)
+            else:
+                self.lbl_server_status.setText(tr("mobile_status_no_lan"))
+                self.lbl_server_status.setStyleSheet(
+                    f"color: {theme.c('warn')}; font-weight: bold;"
+                )
+                self.btn_pair.setEnabled(False)
+        else:
+            self.lbl_server_status.setText(tr("mobile_status_disabled"))
+            self.lbl_server_status.setStyleSheet(f"color: {theme.c('muted')};")
+            self.btn_pair.setEnabled(False)
+
+    def _refresh_paired_devices(self) -> None:
+        self.list_devices.clear()
+        devices = self.device_manager.list_devices(include_revoked=False)
+        for dev in devices:
+            created = dev.created_at[:10] if dev.created_at else ""
+            seen = dev.last_seen[:16].replace("T", " ") if dev.last_seen else tr("status_never")
+            item_text = f"📱 {dev.name} (dodano: {created}, aktywność: {seen})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, dev)
+            self.list_devices.addItem(item)
+        if not devices:
+            item = QListWidgetItem(tr("no_paired_devices"))
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            self.list_devices.addItem(item)
+        self.btn_revoke_device.setEnabled(False)
+
+    def _on_device_selection_changed(self, row: int) -> None:
+        item = self.list_devices.item(row)
+        dev = item.data(Qt.ItemDataRole.UserRole) if item else None
+        self.btn_revoke_device.setEnabled(dev is not None)
+
+    def _on_pair_device(self) -> None:
+        dlg = PairingDialog(
+            device_manager=self.device_manager,
+            port=self.config.server.port,
+            data_dir=self.data_dir,
+            bind_host=self.config.server.bind,
+            parent=self,
+        )
+        dlg.exec()
+        self._refresh_paired_devices()
+
+    def _on_revoke_device(self) -> None:
+        row = self.list_devices.currentRow()
+        item = self.list_devices.item(row)
+        if not item:
+            return
+        dev = item.data(Qt.ItemDataRole.UserRole)
+        if not dev:
+            return
+
+        ans = QMessageBox.question(
+            self,
+            "MailVoice",
+            tr("revoke_device_confirm", name=dev.name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if ans == QMessageBox.StandardButton.Yes:
+            self.device_manager.revoke_device(dev.id)
+            self._refresh_paired_devices()
+
     def _load_values(self) -> None:
         # Konta
         self.account_drafts.clear()
@@ -596,6 +748,11 @@ class SettingsDialog(QDialog):
         self.txt_local_url.setText(self.config.ollama.local_url)
         self.txt_lan_url.setText(self.config.ollama.lan_url)
         self._repopulate_model_combos()
+
+        # Telefon (Android)
+        self.cb_server_enabled.setChecked(self.config.server.enabled)
+        self._update_server_status_ui()
+        self._refresh_paired_devices()
 
     def _load_draft_to_form(self, draft: AccountDraft) -> None:
         self._is_updating_form = True
@@ -1268,6 +1425,13 @@ class SettingsDialog(QDialog):
             timeout_s=self.config.ollama.timeout_s,
         )
 
+        server_cfg = ServerConfig(
+            enabled=self.cb_server_enabled.isChecked(),
+            port=self.config.server.port,
+            bind=self.config.server.bind,
+            max_devices=self.config.server.max_devices,
+        )
+
         new_config = AppConfig(
             accounts=new_accounts,
             analysis_prompt=self.txt_desc.toPlainText().strip(),
@@ -1285,6 +1449,7 @@ class SettingsDialog(QDialog):
             digest_days=self.spin_digest_days.value(),
             my_addresses=self.config.my_addresses,
             ollama=ollama_cfg,
+            server=server_cfg,
         )
 
         try:

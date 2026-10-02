@@ -233,3 +233,58 @@ def test_voice_dialog_speaks_safely_filters_urls():
     spoken_text = speaker.spoken[0]
     assert "https://phishing-site.xyz/login" not in spoken_text
     assert "[link pominięty]" in spoken_text
+
+
+def test_static_ast_server_no_outgoing_http_requests():
+    """Weryfikuje, że w mailvoice/server nie ma wywołań klienta HTTP ani żądań wychodzących.
+
+    Serwer służy WYŁĄCZNIE do nasłuchu (odbieranie połączeń z aplikacji mobilnej przez aiohttp.web),
+    nigdy nie nawiązuje połączeń wychodzących.
+    """
+    src_dir = Path(__file__).resolve().parent.parent / "src"
+    server_dir = src_dir / "mailvoice" / "server"
+    if not server_dir.exists():
+        return
+
+    errors: list[str] = []
+
+    for py_file in server_dir.rglob("*.py"):
+        code = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(code, filename=str(py_file))
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in ("requests", "httpx", "urllib.request"):
+                        errors.append(
+                            f"{py_file}:{node.lineno} Zabroniony klient HTTP: {alias.name}"
+                        )
+                    if alias.name.startswith("aiohttp.client"):
+                        errors.append(
+                            f"{py_file}:{node.lineno} Zabroniony import klienta aiohttp: "
+                            f"{alias.name}"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                if mod in ("requests", "httpx", "urllib.request") or mod.startswith(
+                    ("requests.", "httpx.", "urllib.request.")
+                ):
+                    errors.append(f"{py_file}:{node.lineno} Zabroniony klient HTTP: {mod}")
+                if "client" in mod.split("."):
+                    errors.append(
+                        f"{py_file}:{node.lineno} Zabroniony import modułu klienta aiohttp: {mod}"
+                    )
+                for alias in node.names:
+                    if alias.name in ("ClientSession", "ClientTimeout", "ClientResponse"):
+                        errors.append(
+                            f"{py_file}:{node.lineno} Zabroniony klient aiohttp: {alias.name}"
+                        )
+            elif isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id == "ClientSession":
+                    errors.append(f"{py_file}:{node.lineno} Zabronione wywołanie ClientSession()")
+                elif isinstance(node.func, ast.Attribute) and node.func.attr == "ClientSession":
+                    errors.append(f"{py_file}:{node.lineno} Zabronione wywołanie ClientSession()")
+
+    assert not errors, (
+        "Wykryto naruszenie: serwer nie może wykonywać żądań wychodzących:\n" + "\n".join(errors)
+    )

@@ -147,6 +147,14 @@ MailVoice is built and tested on [Omarchy](https://omarchy.org) (Arch, Hyprland,
 **Gmail:** you need an *app password* (Google Account → Security → 2-step verification → App passwords). The wizard
 explains this. Use a test account first.
 
+## Phone Companion App (Android)
+
+MailVoice includes a local HTTPS/WebSocket server (`pip install -e ".[server]"`) for an Android companion app over Wi-Fi:
+- **Zero raw email or attachments on the phone:** The phone only receives summaries and notifications for important mail.
+- **QR code pairing:** Easily paired via Settings → *Phone (Android)* with a 120s one-time code and certificate SHA-256 pinning.
+- **Headless mode:** Run the service and server without GUI windows via `mailvoice-server` or `python -m mailvoice --headless`.
+- See [`docs/mobile-api.md`](docs/mobile-api.md) for full API documentation.
+
 ## Develop
 
 ```bash

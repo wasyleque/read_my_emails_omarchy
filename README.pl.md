@@ -145,6 +145,14 @@ MailVoice powstaje i jest testowany na [Omarchy](https://omarchy.org) (Arch, Hyp
 **Gmail:** potrzebne jest *hasło aplikacji* (Konto Google → Bezpieczeństwo → Weryfikacja dwuetapowa → Hasła do
 aplikacji). Kreator to wyjaśnia. Na początek użyj konta testowego.
 
+## Aplikacja na telefon (Android)
+
+MailVoice zawiera wbudowany serwer lokalny HTTPS/WebSocket (`pip install -e ".[server]"`) dla aplikacji towarzyszącej na Androida przez Wi-Fi:
+- **Brak surowych maili i załączników na telefonie:** Telefon otrzymuje wyłącznie streszczenia i powiadomienia o ważnych wiadomościach.
+- **Parowanie kodem QR:** Szybkie parowanie w Ustawieniach → *Telefon (Android)* z jednorazowym kodem (120 s) i przypięciem odcisku certyfikatu SHA-256.
+- **Tryb bezokienkowy (headless):** Możliwość uruchomienia serwisu i serwera w tle bez interfejsu graficznego za pomocą `mailvoice-server` lub `python -m mailvoice --headless`.
+- Pełna specyfikacja API dostępna w [`docs/mobile-api.md`](docs/mobile-api.md).
+
 ## Rozwój
 
 ```bash
