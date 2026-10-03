@@ -15,7 +15,9 @@ from mailvoice.core.contacts import (
     resolve_contact,
 )
 from mailvoice.core.digest import Digest, build_digest
+from mailvoice.core.ignore import is_ignored_by_config
 from mailvoice.core.imap_fetch import FetchError, ImapToolsClient, MailboxClient
+from mailvoice.core.mailparse import ParsedMail
 from mailvoice.core.pipeline import (
     CycleResult,
     PendingBacklog,
@@ -320,6 +322,56 @@ class MailService:
         if emit:
             self._emit(DigestReady(digest=digest))
         return digest
+
+    def recent_important(self, limit: int = 50) -> list[ProcessedMail]:
+        """Odtwarza z bazy ostatnie ważne wiadomości przychodzące (do wypełnienia listy po starcie).
+
+        Zwraca obiekty ProcessedMail zbudowane z indeksu (bez pełnej treści — body puste,
+        streszczenie z indeksu). Dzięki temu po starcie widać wiadomości zebrane wcześniej
+        (także na innym urządzeniu), zamiast czekać na nowy cykl poczty.
+        """
+        records = self.store.get_important_indexed_records(
+            min_importance=self.config.importance_threshold,
+            limit=limit,
+        )
+        result: list[ProcessedMail] = []
+        for r in records:
+            # Zignorowane przez użytkownika nie wracają na listę po restarcie (jak na telefonie).
+            if is_ignored_by_config(self.config, r.sender, r.subject):
+                continue
+            try:
+                date = datetime.fromisoformat(r.date) if r.date else None
+            except ValueError:
+                date = None
+            risk_reasons = tuple(x for x in (r.risk_reasons or "").split("; ") if x)
+            mail = ParsedMail(
+                message_id=r.message_id,
+                sender=r.sender,
+                subject=r.subject,
+                date=date,
+                in_reply_to=None,
+                references=(),
+                body_text="",
+            )
+            result.append(
+                ProcessedMail(
+                    account=r.account,
+                    folder=r.folder,
+                    uidvalidity=r.uidvalidity,
+                    uid=r.uid,
+                    mail=mail,
+                    final_importance=r.importance or 0,
+                    rule_reasons=(),
+                    analysis_reason=r.why or "",
+                    action="notify",
+                    language=self.config.language,
+                    suspicious=(r.risk == "high"),
+                    risk_level=r.risk,
+                    risk_reasons=risk_reasons,
+                    summary=r.summary or "",
+                )
+            )
+        return result
 
     def contact_context(
         self,

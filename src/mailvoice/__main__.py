@@ -20,7 +20,7 @@ from mailvoice.ui.wizard import SetupWizard
 from mailvoice.voice.beeper import SounddeviceBeeper
 from mailvoice.voice.dialog import VoiceDialog
 from mailvoice.voice.stt import WhisperListener
-from mailvoice.voice.tts import PiperSpeaker
+from mailvoice.voice.tts import PiperSpeaker, Speaker, WindowsSapiSpeaker
 
 
 class MemorySecretStore:
@@ -45,6 +45,17 @@ def get_secret_store() -> SecretStore:
         return KeyringStore()
     except SecretStoreUnavailable:
         return MemorySecretStore()
+
+
+def _make_speaker() -> Speaker:
+    """Wybiera syntezator mowy: na Windows głosy systemowe (SAPI), inaczej Piper.
+
+    Głosy Windows (np. Paulina, Zira) nie wymagają pobierania modeli ani sounddevice,
+    więc na świeżym Windows działają od razu. Piper zostaje domyślny na Linux/macOS.
+    """
+    if sys.platform == "win32":
+        return WindowsSapiSpeaker()
+    return PiperSpeaker()
 
 
 def main() -> int:
@@ -126,7 +137,7 @@ def _run() -> int:
         ollama_client=ollama_client,
     )
 
-    speaker = PiperSpeaker()
+    speaker = _make_speaker()
     listener = WhisperListener()
     listener.preload()  # model Whisper ładuje się w tle, nie przy pierwszym pytaniu
     beeper = SounddeviceBeeper()

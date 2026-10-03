@@ -651,6 +651,10 @@ class SetupWizard(QWizard):
         self.secret_store = secret_store
         self.speaker = speaker or FakeSpeaker()
         self.setWindowTitle(tr("wizard_title"))
+        # AeroStyle (domyślny na Windows) wymusza białe tło strony niezależnie od motywu —
+        # przy ciemnym motywie systemowym tekst (biały) znika na białym tle. ModernStyle
+        # respektuje paletę systemową i działa tak samo na Windows i Linux.
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.resize(680, 520)
 
         # Strony

@@ -60,6 +60,80 @@ class FakeSpeaker:
         self.volume = max(0.0, min(2.0, volume))
 
 
+class WindowsSapiSpeaker:
+    """Syntezator mowy oparty na wbudowanych głosach Windows (System.Speech przez PowerShell).
+
+    Nie wymaga modeli Piper ani sounddevice — używa głosów zainstalowanych w systemie
+    (np. „Microsoft Paulina Desktop” dla polskiego, „Microsoft Zira Desktop” dla angielskiego).
+    """
+
+    def __init__(
+        self,
+        pl_voice: str = "Microsoft Paulina Desktop",
+        en_voice: str = "Microsoft Zira Desktop",
+    ) -> None:
+        self.pl_voice = pl_voice
+        self.en_voice = en_voice
+        self.volume: float = 1.0
+        self._current_process: subprocess.Popen | None = None
+
+    @staticmethod
+    def _powershell() -> str | None:
+        return shutil.which("powershell") or shutil.which("pwsh")
+
+    def _verify_availability(self) -> str:
+        if sys.platform != "win32":
+            raise VoiceUnavailable("Głosy Windows (SAPI) są dostępne tylko w systemie Windows.")
+        ps = self._powershell()
+        if not ps:
+            raise VoiceUnavailable("Nie znaleziono programu PowerShell do odtworzenia mowy.")
+        return ps
+
+    def speak(self, text: str, lang: str = "pl") -> None:
+        ps = self._verify_availability()
+        voice = self.en_voice if lang.lower().startswith("en") else self.pl_voice
+        sapi_volume = max(0, min(100, round(self.volume * 100)))
+        # Nazwa głosu i głośność pochodzą od nas (nie od treści maila) — brak ryzyka wstrzyknięcia.
+        # Treść maila trafia wyłącznie przez stdin i nigdy nie jest wklejana do polecenia.
+        script = (
+            "[Console]::InputEncoding=[Text.Encoding]::UTF8;"
+            "Add-Type -AssemblyName System.Speech;"
+            "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+            f"try{{$s.SelectVoice('{voice}')}}catch{{}};"
+            f"$s.Volume={sapi_volume};"
+            "$s.Speak([Console]::In.ReadToEnd())"
+        )
+        try:
+            self._current_process = subprocess.Popen(
+                [ps, "-NoProfile", "-NonInteractive", "-Command", script],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            _, err = self._current_process.communicate(input=text.encode("utf-8"))
+            code = self._current_process.returncode
+            if code not in (0, None) and err:
+                tail = err.decode("utf-8", "replace").strip().splitlines()[-1:]
+                raise VoiceUnavailable(f"Głos Windows nie odtworzył mowy: {' '.join(tail)}")
+        except VoiceUnavailable:
+            raise
+        except Exception as exc:
+            raise VoiceUnavailable(f"Błąd podczas syntezy mowy (Windows): {exc}") from exc
+        finally:
+            self._current_process = None
+
+    def stop(self) -> None:
+        if self._current_process is not None:
+            try:
+                self._current_process.terminate()
+            except Exception:
+                pass
+            self._current_process = None
+
+    def set_volume(self, volume: float) -> None:
+        self.volume = max(0.0, min(2.0, volume))
+
+
 class PiperSpeaker:
     """Syntezator mowy oparty na zewnętrznym programie Piper i bibliotece sounddevice."""
 

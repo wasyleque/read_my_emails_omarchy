@@ -99,9 +99,10 @@ def test_encrypted_file_store_roundtrip(tmp_path: Path):
     store.set("gmail", "HasloAplikacjiGmail")
     store.set("work", "HasloDoPocztyPracy")
 
-    # Weryfikacja uprawnień 0600
-    st_mode = os.stat(path).st_mode
-    assert oct(st_mode & 0o777) == "0o600"
+    # Weryfikacja uprawnień 0600 (pomijane na Windows — inny system uprawnień)
+    if os.name != "nt":
+        st_mode = os.stat(path).st_mode
+        assert oct(st_mode & 0o777) == "0o600"
 
     # Weryfikacja braku hasła w pliku otwartym tekstem
     with open(path, "rb") as f:

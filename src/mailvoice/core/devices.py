@@ -114,6 +114,8 @@ class DeviceManager:
         self._shared: sqlite3.Connection | None = None
         if self._memory:
             self._shared = sqlite3.connect(":memory:", check_same_thread=False)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
 
         self._active_session: PairingSession | None = None
         self._session_lock = threading.Lock()

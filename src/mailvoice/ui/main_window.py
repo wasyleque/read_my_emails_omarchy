@@ -175,8 +175,23 @@ class MainWindow(QMainWindow):
         self._init_tray()
         self._init_timer()
         self._update_mobile_server()
+        self._load_recent_important()
         if self.service and not self.service.config.accounts:
             self.lbl_status.setText(tr("status_no_accounts"))
+
+    def _load_recent_important(self) -> None:
+        """Wypełnia listę wiadomości ważnymi mailami zapisanymi wcześniej w bazie.
+
+        Bez tego zakładka „Wiadomości” była pusta aż do następnego cyklu, mimo że podsumowanie
+        (czytające z bazy) pokazywało treści i telefon miał już wiadomości.
+        """
+        if not self.service:
+            return
+        try:
+            for item in self.service.recent_important():
+                self._add_important_mail(item)
+        except Exception:
+            pass  # brak historii nie może blokować startu okna
 
     def _init_ui(self) -> None:
         central_widget = QWidget(self)

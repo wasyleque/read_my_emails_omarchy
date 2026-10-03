@@ -30,6 +30,13 @@ class IgnoreDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr(f"{self._kind}_question")))
 
+        # Podgląd tworzymy przed podłączeniem sygnałów: setChecked() niżej emituje toggled,
+        # które wywołuje _update_preview — bez tego AttributeError na jeszcze nieistniejącym
+        # _preview (do layoutu dodajemy go niżej, by zachować kolejność: przyciski → podgląd).
+        self._preview = QLabel("")
+        self._preview.setWordWrap(True)
+        self._preview.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
+
         self._group = QButtonGroup(self)
         self._buttons: dict[str, QRadioButton] = {}
         for mode in IGNORE_MODES:
@@ -40,9 +47,6 @@ class IgnoreDialog(QDialog):
             button.toggled.connect(self._update_preview)
         self._buttons["similar"].setChecked(True)
 
-        self._preview = QLabel("")
-        self._preview.setWordWrap(True)
-        self._preview.setStyleSheet(f"color: {theme.c('muted')}; font-size: 11px;")
         layout.addWidget(self._preview)
         layout.addWidget(QLabel(tr(f"{self._kind}_undo_hint")))
 
