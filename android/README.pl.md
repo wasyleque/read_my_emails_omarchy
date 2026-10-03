@@ -11,10 +11,10 @@ podoba, na ekranie Ustawień jest przycisk „♥ Jeśli Ci się podoba, wesprzy
 
 ## 0. Gotowy plik APK (bez budowania)
 
-1. Pobierz `MailVoice-0.1.0-beta.apk` z [wydania Android](../../../releases/tag/android-v0.1.0-beta) i porównaj jego
-   SHA-256 z podanym w opisie wydania (`sha256sum MailVoice-0.1.0-beta.apk`).
+1. Pobierz `MailVoice-0.1.1-beta.apk` z [wydania Android](../../../releases/tag/android-v0.1.1-beta) i porównaj jego
+   SHA-256 z podanym w opisie wydania (`sha256sum MailVoice-0.1.1-beta.apk`).
 2. **Przez USB:** włącz *Opcje programisty → Debugowanie USB*, podłącz telefon i uruchom
-   `adb install -r MailVoice-0.1.0-beta.apk`. **Albo na telefonie:** otwórz plik i zezwól na instalowanie nieznanych aplikacji.
+   `adb install -r MailVoice-0.1.1-beta.apk`. **Albo na telefonie:** otwórz plik i zezwól na instalowanie nieznanych aplikacji.
 3. Uruchom program MailVoice na komputerze, włącz serwer dla telefonu (Ustawienia → Telefon), pokaż kod QR i zeskanuj
    go w aplikacji. Aplikacja wymaga programu na komputerze — sama nie działa.
 

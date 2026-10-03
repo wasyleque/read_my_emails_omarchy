@@ -162,9 +162,9 @@ MailVoice includes a local HTTPS/WebSocket server (`pip install -e ".[server]"`)
 - **Zero raw email or attachments on the phone:** The phone only receives summaries and notifications for important mail.
 - **QR code pairing:** Easily paired via Settings → *Phone (Android)* with a 120s one-time code and certificate SHA-256 pinning.
 - **Headless mode:** Run the service and server without GUI windows via `mailvoice-server` or `python -m mailvoice --headless`.
-- **Install the app:** download `MailVoice-0.1.0-beta.apk` from the
-  [Android release](../../releases/tag/android-v0.1.0-beta) and either open it on the phone (allow "install unknown
-  apps" for your browser/file manager) or install it over USB: `adb install -r MailVoice-0.1.0-beta.apk`. Check the
+- **Install the app:** download `MailVoice-0.1.1-beta.apk` from the
+  [Android release](../../releases/tag/android-v0.1.1-beta) and either open it on the phone (allow "install unknown
+  apps" for your browser/file manager) or install it over USB: `adb install -r MailVoice-0.1.1-beta.apk`. Check the
   SHA-256 given in the release notes. Details: [`android/README.md`](android/README.md).
 - **On the phone:** important mail with summaries, the topic digest ("Matters": waiting for me / for others), voice
   control (the phone does speech-to-text and text-to-speech, analysis stays on your computer) and the same

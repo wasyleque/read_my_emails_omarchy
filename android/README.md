@@ -11,10 +11,10 @@ it, the app's Settings screen has a "♥ If you like it, please donate" button (
 
 ## 0. Install a ready-made APK (no building)
 
-1. Download `MailVoice-0.1.0-beta.apk` from the [Android release](../../../releases/tag/android-v0.1.0-beta) and
-   compare its SHA-256 with the one in the release notes (`sha256sum MailVoice-0.1.0-beta.apk`).
+1. Download `MailVoice-0.1.1-beta.apk` from the [Android release](../../../releases/tag/android-v0.1.1-beta) and
+   compare its SHA-256 with the one in the release notes (`sha256sum MailVoice-0.1.1-beta.apk`).
 2. **Over USB:** enable *Developer options → USB debugging*, connect the phone and run
-   `adb install -r MailVoice-0.1.0-beta.apk`. **Or on the phone:** open the file and allow "install unknown apps".
+   `adb install -r MailVoice-0.1.1-beta.apk`. **Or on the phone:** open the file and allow "install unknown apps".
 3. Start the MailVoice desktop program, enable the phone server (Settings → Phone), show the QR code and scan it
    in the app. The app needs the desktop program — it does not work on its own.
 
