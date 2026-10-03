@@ -160,6 +160,10 @@ MailVoice zawiera wbudowany serwer lokalny HTTPS/WebSocket (`pip install -e ".[s
 - **Brak surowych maili i załączników na telefonie:** Telefon otrzymuje wyłącznie streszczenia i powiadomienia o ważnych wiadomościach.
 - **Parowanie kodem QR:** Szybkie parowanie w Ustawieniach → *Telefon (Android)* z jednorazowym kodem (120 s) i przypięciem odcisku certyfikatu SHA-256.
 - **Tryb bezokienkowy (headless):** Możliwość uruchomienia serwisu i serwera w tle bez interfejsu graficznego za pomocą `mailvoice-server` lub `python -m mailvoice --headless`.
+- **Instalacja aplikacji:** pobierz `MailVoice-0.1.0-beta.apk` z
+  [wydania Android](../../releases/tag/android-v0.1.0-beta) i otwórz go na telefonie (zezwól na „instalowanie
+  nieznanych aplikacji” dla przeglądarki/menedżera plików) albo zainstaluj przez USB: `adb install -r MailVoice-0.1.0-beta.apk`.
+  Sprawdź sumę SHA-256 podaną w opisie wydania. Szczegóły: [`android/README.pl.md`](android/README.pl.md).
 - **Na telefonie:** ważne maile ze streszczeniami, podsumowanie tematów („Sprawy”: czeka na mnie / na innych), sterowanie
   głosem (telefon robi rozpoznawanie i czytanie mowy, analiza zostaje na komputerze) oraz te same przyciski
   **Ignoruj… / VIP…**.

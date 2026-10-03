@@ -74,3 +74,11 @@ android/local.properties
 android/.idea/
 android/*.iml
 android/captures/
+
+# Klucze podpisu aplikacji Android i pliki wynikowe (NIGDY do repozytorium; APK idzie do GitHub Releases)
+android/keystore.properties
+keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab

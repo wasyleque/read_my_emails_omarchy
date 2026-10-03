@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_gitignore_blocks_personal_data():
     lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-    for pattern in ("config.json", "*.db", "*.sqlite", "*.eml", "*.mbox", ".env", "*.vault"):
+    patterns = ("config.json", "*.db", "*.sqlite", "*.eml", "*.mbox", ".env", "*.vault")
+    patterns += ("*.jks", "*.keystore", "keystore.properties")  # klucze podpisu aplikacji
+    for pattern in patterns:
         assert pattern in lines, f"brak {pattern} w .gitignore"
 
 

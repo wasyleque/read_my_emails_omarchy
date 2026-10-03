@@ -6,6 +6,23 @@ Aplikacja towarzysząca programowi MailVoice na komputerze (parowanie kodem QR p
 
 ---
 
+## 0. Gotowy plik APK (bez budowania)
+
+1. Pobierz `MailVoice-0.1.0-beta.apk` z [wydania Android](../../../releases/tag/android-v0.1.0-beta) i porównaj jego
+   SHA-256 z podanym w opisie wydania (`sha256sum MailVoice-0.1.0-beta.apk`).
+2. **Przez USB:** włącz *Opcje programisty → Debugowanie USB*, podłącz telefon i uruchom
+   `adb install -r MailVoice-0.1.0-beta.apk`. **Albo na telefonie:** otwórz plik i zezwól na instalowanie nieznanych aplikacji.
+3. Uruchom program MailVoice na komputerze, włącz serwer dla telefonu (Ustawienia → Telefon), pokaż kod QR i zeskanuj
+   go w aplikacji. Aplikacja wymaga programu na komputerze — sama nie działa.
+
+APK jest podpisany kluczem wydań projektu (SHA-256 certyfikatu
+`1068d504bbd87568509a3c90d136be075c069cc9c9e93b8119ca27fba19cd97f`). To **nie** jest wersja ze sklepu Google Play.
+Aktualizacje muszą być podpisane tym samym kluczem; jeśli wcześniej zbudowałeś własny APK debug, najpierw go odinstaluj
+(sparujesz telefon ponownie). Uprawnienia: aparat (QR), mikrofon (komendy głosowe), powiadomienia, usługa w tle
+(odbieranie alertów) oraz prośby o „uruchamianie przy starcie” i wyłączenie optymalizacji baterii, żeby alerty docierały.
+
+---
+
 ## 1. Wymagania i budowanie
 
 - **JDK**: Temurin 21 (`mise where java@temurin-21`)

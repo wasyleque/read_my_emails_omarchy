@@ -6,6 +6,23 @@ Companion app for the MailVoice desktop program (pairing by QR code over your ow
 
 ---
 
+## 0. Install a ready-made APK (no building)
+
+1. Download `MailVoice-0.1.0-beta.apk` from the [Android release](../../../releases/tag/android-v0.1.0-beta) and
+   compare its SHA-256 with the one in the release notes (`sha256sum MailVoice-0.1.0-beta.apk`).
+2. **Over USB:** enable *Developer options → USB debugging*, connect the phone and run
+   `adb install -r MailVoice-0.1.0-beta.apk`. **Or on the phone:** open the file and allow "install unknown apps".
+3. Start the MailVoice desktop program, enable the phone server (Settings → Phone), show the QR code and scan it
+   in the app. The app needs the desktop program — it does not work on its own.
+
+The APK is signed with the project's release key (certificate SHA-256
+`1068d504bbd87568509a3c90d136be075c069cc9c9e93b8119ca27fba19cd97f`). It is **not** from Google Play. Updates must
+be signed with the same key; if you built your own debug APK earlier, uninstall it first (you will pair again).
+Permissions: camera (QR), microphone (voice commands), notifications, a foreground service (receiving alerts in the
+background), and "run at boot"/"ignore battery optimisation" requests so alerts keep arriving.
+
+---
+
 ## 1. Requirements and building
 
 - **JDK**: Temurin 21 (`mise where java@temurin-21`)
