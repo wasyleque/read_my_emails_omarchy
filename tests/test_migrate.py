@@ -55,5 +55,7 @@ def test_same_directory_is_a_noop(tmp_path):
 
 
 def test_main_window_does_not_use_config_dir_as_data_dir():
-    src = (Path(__file__).resolve().parents[1] / "src/mailvoice/ui/main_window.py").read_text()
+    src = (Path(__file__).resolve().parents[1] / "src/mailvoice/ui/main_window.py").read_text(
+        encoding="utf-8"
+    )
     assert "self.config_path.parent" not in src
