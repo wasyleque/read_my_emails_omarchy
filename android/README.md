@@ -1,130 +1,157 @@
-# MailVoice — aplikacja na Androida / Android app
+# MailVoice — Android app
+
+**🇬🇧 English** · [🇵🇱 Polski](README.pl.md)
 
 Companion app for the MailVoice desktop program (pairing by QR code over your own Wi-Fi / local network).
 
 ---
 
-## 1. Wymagania i budowanie / Build requirements
+## 1. Requirements and building
 
 - **JDK**: Temurin 21 (`mise where java@temurin-21`)
 - **Android SDK**: compileSdk 35, minSdk 26, build-tools
 - **Gradle**: 8.7, AGP 8.5.2, Kotlin 1.9.24, Compose BOM 2024.06.00 (Compose compiler 1.5.14)
-- **Ważne ograniczenie RAM**: Z powodu ograniczeń pamięci maszyny buduj **zawsze maksymalnie jedno zadanie Gradle naraz**, nigdy równolegle.
+- **Memory limit**: because of RAM limits on the dev machine, run **at most one Gradle task at a time**, never in parallel.
 
-### Uruchomienie testów jednostkowych JVM:
+### Run the JVM unit tests
 ```bash
 cd android
 export JAVA_HOME=$(mise where java@temurin-21) ANDROID_HOME=$HOME/Android/Sdk
 nice -n 10 ./gradlew :app:testDebugUnitTest --console=plain
 ```
 
-### Budowanie pakietu APK (Debug):
+### Build the debug APK
 ```bash
 cd android
 export JAVA_HOME=$(mise where java@temurin-21) ANDROID_HOME=$HOME/Android/Sdk
 nice -n 10 ./gradlew :app:assembleDebug --console=plain
-# Wynik: app/build/outputs/apk/debug/app-debug.apk
+# Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Instalacja na telefonie (ADB):
+### Install on a phone (ADB)
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-*Uwaga dla telefonów Xiaomi / Poco (HyperOS / MIUI)*: W opcjach programisty włącz *Instaluj przez USB* oraz *Debugowanie USB (Ustawienia zabezpieczeń)*. Dla niezawodnego działania wyłącz optymalizację baterii (tryb „Bez ograniczeń”) i zezwól na autostart.
+*Xiaomi / Poco phones (HyperOS / MIUI):* in Developer options enable *Install via USB* and *USB debugging
+(Security settings)*. For reliable background notifications disable battery optimisation ("No restrictions") and
+allow autostart.
 
 ---
 
-## 2. Zależności i uzasadnienie / Dependencies & Rationale
+## 2. Dependencies and rationale
 
-Wszystkie zależności zostały dobrane pod kątem stabilności, bezpieczeństwa offline oraz kompatybilności z Kotlin 1.9.24:
+All dependencies were chosen for stability, offline security and compatibility with Kotlin 1.9.24:
 
-1. **`com.squareup.okhttp3:okhttp:4.12.0`**:
-   - Bezpieczna konfiguracja `SSLSocketFactory` i `X509TrustManager` per-klient, bez modyfikowania globalnego stanu maszyny JVM (w przeciwieństwie do `HttpsURLConnection.setDefaultSSLSocketFactory`).
-   - Wymuszenie protokołów TLS 1.2 i TLS 1.3 (`ConnectionSpec.MODERN_TLS`).
-   - Pula połączeń, precyzyjne limity czasu (timeouts) oraz natywne wsparcie dla WebSockets (WSS).
-2. **`com.google.mlkit:barcode-scanning:17.3.0` (wersja standalone z wbudowanym modelem)**:
-   - Działa całkowicie **offline**, w lokalnej sieci LAN bez konieczności pobierania modeli z internetu.
-   - Działa na telefonach bez Usług Google Play (de-Googled, MicroG, VPN).
-3. **`androidx.camera:camera-camera2:1.3.4`**, **`camera-lifecycle:1.3.4`**, **`camera-view:1.3.4`**:
-   - Oficjalna biblioteka CameraX do strumieniowania klatek podglądu i analizy obrazu QR w Jetpack Compose.
-4. **`androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3`**:
-   - Integracja architektury MVVM z Jetpack Compose.
-5. **Zależności testowe**:
-   - `junit:4.13.2` — testy jednostkowe na JVM.
-   - `com.squareup.okhttp3:mockwebserver:4.12.0` + `okhttp-tls:4.12.0` — lokalny serwer testowy TLS z generowaniem certyfikatów w testach JVM.
-   - `org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1` — deterministyczne testowanie asynchronicznego kodu w ViewModel i repozytorium.
-   - `org.json:json:20240303` — obsługa JSON w testach JVM bez narzutu frameworka Android.
-
----
-
-## 3. Architektura bezpieczeństwa (B1: Parowanie i połączenie)
-
-Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
-- **Certificate Pinning**: Akceptowany jest wyłącznie certyfikat serwera, którego skrót SHA-256 (DER) odpowiada odciskowi z kodu QR. Porównanie jest stałoczasowe (`MessageDigest.isEqual`), chroniąc przed atakami timingowymi.
-- **Brak ruchu nieszyfrowanego**: `cleartextTrafficPermitted=false`, wymuszenie HTTPS/TLS 1.2+, odrzucanie żądań HTTP.
-- **Bezpieczny magazyn poświadczeń (`KeystoreTokenStore`)**: Token Bearer i odcisk serwera są szyfrowane algorytmem AES-256-GCM kluczem sprzętowym z `AndroidKeyStore`. Wektor IV (12 bajtów) generowany jest losowo przy każdym zapisie. Kopie zapasowe są wyłączone (`allowBackup="false"`).
-- **Zasady prywatności**: Tokeny i dane uwierzytelniające nigdy nie trafiają do logów systemowych (`android.util.Log`). Surowe treści e-mail oraz załączniki nigdy nie są pobierane ani przetwarzane przez telefon.
-- **Zasady UX**: Interfejs krok po kroku z instrukcją 1-2-3, celownikiem skanera, możliwością ręcznego wpisania parametrów, przyjaznymi komunikatami błędów po polsku i angielsku (i18n).
+1. **`com.squareup.okhttp3:okhttp:4.12.0`**
+   - Per-client `SSLSocketFactory` and `X509TrustManager`, without touching global JVM state (unlike
+     `HttpsURLConnection.setDefaultSSLSocketFactory`).
+   - TLS 1.2 and 1.3 only (`ConnectionSpec.MODERN_TLS`).
+   - Connection pool, precise timeouts and native WebSocket (WSS) support.
+2. **`com.google.mlkit:barcode-scanning:17.3.0` (standalone, bundled model)**
+   - Works fully **offline** on the local network, no model download needed.
+   - Works on phones without Google Play Services (de-Googled, MicroG, VPN).
+3. **`androidx.camera:camera-camera2:1.3.4`**, **`camera-lifecycle:1.3.4`**, **`camera-view:1.3.4`**
+   - Official CameraX library for the preview stream and QR image analysis in Jetpack Compose.
+4. **`androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3`**
+   - MVVM integration with Jetpack Compose.
+5. **Test dependencies**
+   - `junit:4.13.2` — JVM unit tests.
+   - `com.squareup.okhttp3:mockwebserver:4.12.0` + `okhttp-tls:4.12.0` — a local TLS test server with certificates
+     generated inside the tests.
+   - `org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1` — deterministic testing of async code in ViewModels.
+   - `org.json:json:20240303` — JSON in JVM tests without the Android framework.
 
 ---
 
-## 4. Architektura poczty i głosu (B2: Poczta, Digest i asystent głosowy)
+## 3. Security architecture (B1: pairing and connection)
 
-- **Klient API (`MailApi`)**:
-  - Obsługuje zapytania do endpointów REST serwera: `GET /v1/mails/important`, `GET /v1/mails/{id}/summary`, `POST /v1/mails/{id}/ack`, `GET /v1/digest`, `POST /v1/voice/command`, `GET /v1/status`.
-  - Wszystkie żądania autoryzowane nagłówkiem `Authorization: Bearer <token>`.
-  - Przy błędzie `401 Unauthorized` token jest natychmiast usuwany z telefonu, a aplikacja bezpiecznie powraca do ekranu parowania.
-- **Antyphishing i izolacja niebezpiecznych treści**:
-  - Wiadomości podejrzane (`suspicious == true`) mają całkowicie zablokowaną treść i streszczenie. Aplikacja nie pozwala na ich odsłuchanie głosem ani nie wyświetla linków.
-  - Przed odczytaniem czegokolwiek przez syntezator mowy (`TextToSpeech`), tekst jest przetwarzany przez `UrlSanitizer.prepareForSpeech()`, który usuwa wszystkie odnośniki i zastępuje je naturalną frazą „odnośnik pominięty”.
-- **Asystent głosowy i przepływ „Czytać dalej?”**:
-  - Maszyna stanów `VoiceSessionController` zarządza kolejką czytania, pytaniem „Czytać dalej?” i nasłuchem komend użytkownika.
-  - **Kluczowa zasada bezpieczeństwa**: Komendy wysyłane do `/v1/voice/command` pochodzą **WYŁĄCZNIE z mikrofonu użytkownika** (STT), nigdy z treści maila.
-  - Słuchanie opiera się na `SpeechRecognizer` (z preferencją trybu on-device od API 31+). Aplikacja nie wymaga Usług Google Play i oferuje pełne przyciski dotykowe jako alternatywę w głośnym otoczeniu.
-  - Uprawnienie `RECORD_AUDIO` jest żądane z wyjaśnieniem wyłącznie przy pierwszym użyciu mikrofonu.
-  - Widoczność pakietów na Androidzie 11+ jest zadeklarowana w `<queries>` dla `android.speech.RecognitionService` oraz `android.intent.action.TTS_SERVICE`.
+Following the rules in [`SECURITY.md`](../SECURITY.md):
+- **Certificate pinning**: only the server certificate whose SHA-256 (DER) fingerprint matches the one from the QR
+  code is accepted. The comparison is constant-time (`MessageDigest.isEqual`) to resist timing attacks.
+- **No cleartext traffic**: `cleartextTrafficPermitted=false`, HTTPS/TLS 1.2+ enforced, plain HTTP rejected.
+- **Secure credential store (`KeystoreTokenStore`)**: the Bearer token and server fingerprint are encrypted with
+  AES-256-GCM using a hardware-backed `AndroidKeyStore` key. A fresh random 12-byte IV is used for every write.
+  Backups are disabled (`allowBackup="false"`).
+- **Privacy**: tokens and credentials never reach the system log (`android.util.Log`). Raw e-mail content and
+  attachments are never downloaded or processed by the phone.
+- **UX**: step-by-step 1-2-3 instructions, a scanner viewfinder, manual entry of the parameters, friendly error
+  messages in Polish and English (i18n).
 
 ---
 
-## 5. Ignorowanie wiadomości i reguły (B3: Przycisk „Ignoruj…”)
+## 4. Mail and voice architecture (B2: mail, digest and voice assistant)
 
-- **Integracja API (`POST /v1/mails/{id}/ignore`)**:
-  - Obsługa trzech trybów ignorowania:
-    1. `similar` (domyślny) — podobne maile od tego samego nadawcy (ten sam temat bazowy).
-    2. `sender` — wszystkie maile od danego nadawcy.
-    3. `domain` — wszystkie maile z danej domeny (całej organizacji).
-  - Model odpowiedzi: `status`, `mode`, `rule`.
-- **Interfejs użytkownika (UX „dla opornych”)**:
-  - Dedykowany przycisk „Ignoruj…” dostępny na każdej karcie maila na liście oraz na ekranie szczegółów.
-  - Przycisk jest w pełni dostępny również dla maili podejrzanych (`suspicious == true`), stanowiąc zalecaną, bezpieczną reakcję na próby wyłudzenia danych.
-  - Okno dialogowe (`IgnoreMailDialog`) z trzema opcjami wyboru (Radio), podglądem nadawcy i tematu, blokadą ponownych kliknięć podczas wysyłania żądania oraz czytelnym wyjaśnieniem, że komputer zapamiętuje regułę i można ją edytować/usunąć w Ustawieniach na komputerze.
-  - Po zatwierdzeniu: natychmiastowe usunięcie pozycji z lokalnego widoku, powiadomienie „Zignorowano” (Toast) oraz automatyczne odświeżenie listy z serwera w celu zsynchronizowania innych wiadomości objętych nowo utworzoną regułą.
-  - Przyjazna obsługa błędów (400, 404, 503, brak sieci) w języku polskim z możliwością natychmiastowego ponowienia próby, a przy błędzie autoryzacji (401) automatyczny powrót do ekranu parowania.
-
-## 5a. Oznaczanie VIP (B5: Przycisk „VIP…”) — lustro „Ignoruj…”
-
-- **API (`POST /v1/mails/{id}/vip`)**: te same trzy tryby (`similar` / `sender` / `domain`) i ten sam model odpowiedzi.
-  Komputer zapamiętuje regułę VIP: takie maile zawsze powiadamiają, a wątki z nimi są pierwsze w podsumowaniu.
-- **Interfejs**: przycisk „VIP…” obok „Ignoruj…” na liście i w szczegółach; to samo okno wyboru (`MailRuleDialog`, rodzaj
-  `VIP`/`IGNORE`) z tekstami VIP. Dla maili podejrzanych (⚠) przycisk jest **ukryty** (podrobiony nadawca nie zostaje VIP-em
-  jednym kliknięciem; ViewModel dodatkowo odrzuca takie żądanie). Po sukcesie: „Oznaczono jako VIP” i odświeżenie listy.
-- **Podsumowanie („Sprawy”)**: opcjonalne pole `vip` → znaczek „★ VIP”; limit tematów liczony jest osobno w każdej grupie
-  statusu (duża grupa „czeka na mnie” nie wypycha „czeka na innych”).
-- `UiWiringTest` pilnuje, żeby akcje ViewModelu były faktycznie podpięte w `MainActivity`.
+- **API client (`MailApi`)**
+  - Calls the server's REST endpoints: `GET /v1/mails/important`, `GET /v1/mails/{id}/summary`,
+    `POST /v1/mails/{id}/ack`, `GET /v1/digest`, `POST /v1/voice/command`, `GET /v1/status`.
+  - Every request carries `Authorization: Bearer <token>`.
+  - On `401 Unauthorized` the token is removed from the phone immediately and the app returns to the pairing screen.
+- **Anti-phishing and isolation of dangerous content**
+  - Suspicious mail (`suspicious == true`) has its body and summary fully blocked. The app neither reads it aloud nor
+    shows its links.
+  - Before anything goes to the speech synthesiser (`TextToSpeech`), the text is run through
+    `UrlSanitizer.prepareForSpeech()`, which removes every link and replaces it with a natural phrase ("link omitted").
+- **Voice assistant and the "Continue reading?" flow**
+  - The `VoiceSessionController` state machine manages the reading queue, the "Continue reading?" question and
+    listening for user commands.
+  - **Key safety rule**: commands sent to `/v1/voice/command` come **ONLY from the user's microphone** (speech
+    recognition), never from mail content.
+  - Listening uses `SpeechRecognizer` (on-device mode preferred from API 31). The app does not need Google Play
+    Services and offers full touch buttons as an alternative in noisy places.
+  - The `RECORD_AUDIO` permission is requested, with an explanation, only on first use of the microphone.
+  - Package visibility on Android 11+ is declared in `<queries>` for `android.speech.RecognitionService` and
+    `android.intent.action.TTS_SERVICE`.
 
 ---
 
-## 6. Obsługa stanów ekranu i podsumowanie spraw (B4: Sprawy i odporność UI)
+## 5. Ignoring mail and rules (B3: the "Ignore…" button)
 
-- **Jawne stany ekranu (`MailsUiState`, `DigestUiState`)**:
-  - Wszystkie listy operują na modelu stanów: `Loading`, `Content`, `Empty`, `Error`.
-  - Komunikat stanu pustego (np. „Brak ważnych maili”, „Brak aktywnych spraw w wybranym okresie”) wyświetlany jest **wyłącznie po udanym pobraniu pustej listy** (HTTP 200).
-  - W razie błędu sieciowego, przekroczenia limitu czasu (timeout), błędu serwera (5xx), limitu zapytań (429) lub parsowania, użytkownik otrzymuje czytelny komunikat po polsku z przyciskiem „Spróbuj ponownie”.
-  - Odświeżenie listy z błędem **nie kasuje** wcześniej pobranych wiadomości/spraw — prezentowana jest dotychczasowa lista wraz z banerem błędu u góry.
-- **Optymalizacja podsumowania tematów (`GET /v1/digest`)**:
-  - Dedykowany limit czasu odczytu 30 s dla zapytania digestu bez modyfikacji limitu globalnego.
-  - Domyślne parametry: `GET /v1/digest?days=30&limit=60` zwracające tylko sprawy otwarte.
-  - Rozszerzenie modelu `TopicDigest` o pola `counts` (mapa liczników statusów), `total` i `shown` (z pełną odpornością na brak tych pól przy starszych wersjach serwera).
-  - Nagłówek z licznikami spraw: „Czeka na Ciebie: X · Czeka na innych: Y”.
-  - Przycisk oraz przełącznik „Pokaż także zamknięte i informacyjne (N)” doładowujący sprawy zamknięte i informacyjne (`all=1&limit=100`), z notatką gdy `shown < total` („Pokazano X z Y tematów”).
-  - Wskaźnik ładowania z informacją: „Przygotowuję podsumowanie… Pierwsze ładowanie może potrwać kilka sekund”.
+- **API (`POST /v1/mails/{id}/ignore`)**
+  - Three modes:
+    1. `similar` (default) — similar mail from the same sender (same base subject).
+    2. `sender` — all mail from the sender.
+    3. `domain` — all mail from the domain (the whole organisation).
+  - Response model: `status`, `mode`, `rule`.
+- **User interface ("for dummies" UX)**
+  - A dedicated "Ignore…" button on every mail card in the list and on the detail screen.
+  - It is fully available for suspicious mail too, as the recommended safe reaction to phishing attempts.
+  - A dialog (`IgnoreMailDialog`) with three radio options, a preview of the sender and subject, controls locked
+    while the request is in flight, and a clear note that the computer remembers the rule and it can be edited or
+    removed in the desktop Settings.
+  - After confirming: the item disappears from the local view immediately, an "Ignored" toast appears and the list
+    is refreshed from the server so other mail covered by the new rule is synchronised.
+  - Friendly errors (400, 404, 503, no network) in Polish with an immediate retry; on an authorisation error (401)
+    the app returns to the pairing screen.
+
+## 5a. Marking VIP (B5: the "VIP…" button) — the mirror of "Ignore…"
+
+- **API (`POST /v1/mails/{id}/vip`)**: the same three modes (`similar` / `sender` / `domain`) and response model.
+  The computer remembers the VIP rule: such mail always notifies, and threads with it come first in the digest.
+- **Interface**: a "VIP…" button next to "Ignore…" on the list and detail screens, using the same dialog
+  (`MailRuleDialog`, kind `VIP`/`IGNORE`) with VIP wording. For suspicious mail (⚠) the button is **hidden** (a forged
+  sender cannot become a VIP with one click; the ViewModel also rejects such a request). After success: "Marked as
+  VIP" and a list refresh.
+- **Digest ("Matters")**: the optional `vip` field shows a "★ VIP" badge; the topic limit is applied per status
+  group (a large "waiting for me" group does not push out "waiting for others").
+- `UiWiringTest` makes sure the ViewModel actions are actually wired up in `MainActivity`.
+
+---
+
+## 6. Screen states and the matters digest (B4: "Matters" and UI resilience)
+
+- **Explicit screen states (`MailsUiState`, `DigestUiState`)**
+  - All lists use a state model: `Loading`, `Content`, `Empty`, `Error`.
+  - An empty-state message (e.g. "No important mail", "No active matters in the chosen period") is shown **only
+    after a successful fetch of an empty list** (HTTP 200).
+  - On a network error, timeout, server error (5xx), rate limit (429) or parse error the user gets a clear message
+    with a "Try again" button.
+  - A failed refresh **does not clear** previously loaded mail/matters — the existing list stays with an error
+    banner on top.
+- **Digest optimisation (`GET /v1/digest`)**
+  - A dedicated 30 s read timeout for the digest request, without changing the global timeout.
+  - Default parameters: `GET /v1/digest?days=30&limit=60`, returning open matters only.
+  - `TopicDigest` carries `counts` (status counters), `total` and `shown`, tolerating their absence on older servers.
+  - A header with counters: "Waiting for you: X · Waiting for others: Y".
+  - A button/toggle "Also show closed and informational (N)" that loads them (`all=1&limit=100`), with a note when
+    `shown < total` ("Showing X of Y topics").
+  - A loading indicator: "Preparing the summary… The first load may take a few seconds".
