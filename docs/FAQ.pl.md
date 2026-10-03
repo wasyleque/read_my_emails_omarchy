@@ -56,7 +56,7 @@ Nie, nigdy. Pobierane są tylko nagłówki i części tekstowe wiadomości, a li
 
 ## Co z phishingiem?
 Maile o wysokim ryzyku są oznaczane jako podejrzane, nie są streszczane ani czytane na głos, a pilność w treści nie
-podnosi ich ważności. Szczegóły: [SECURITY.md](../SECURITY.md).
+podnosi ich ważności. Szczegóły: [SECURITY.md](../SECURITY.pl.md).
 
 ## Gdzie są logi?
 `~/.local/state/mailvoice/log/mailvoice.log`

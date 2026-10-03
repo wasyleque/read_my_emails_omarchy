@@ -342,6 +342,11 @@ async def _handle_mail_rule(request: web.Request, kind: str) -> web.Response:
     record = ctx.store.get_mail_index(*target)
     if not record:
         return web.json_response({"error": "Wiadomość nie znaleziona."}, status=404)
+    if kind == "vip" and (record.risk != "low" or record.risk_reasons):
+        # Podrobiony nadawca nie może zostać VIP-em jednym kliknięciem (także gdy ktoś ominie UI).
+        return web.json_response(
+            {"error": "Nie można oznaczyć jako VIP wiadomości podejrzanej."}, status=403
+        )
     rule = rule_for_mail(mode, record.sender, record.subject)
     callback(rule)
     return web.json_response({"status": "ok", "mode": mode, "rule": rule.describe()})

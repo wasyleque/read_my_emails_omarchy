@@ -1,67 +1,81 @@
-# Specyfikacja API serwera mobilnego MailVoice (v1)
+# MailVoice mobile server API specification (v1)
 
-Dokumentacja techniczna lokalnego API serwera MailVoice przeznaczonego dla aplikacji mobilnej Android (np. Poco F4, Android 14) łączącej się przez Wi-Fi w sieci lokalnej.
+**🇬🇧 English** · [🇵🇱 Polski](mobile-api.pl.md)
 
----
+Technical documentation of the local MailVoice server API intended for the Android mobile app (e.g. Poco F4,
+Android 14) connecting over Wi-Fi on the local network.
 
-## 1. Architektura i zasady bezpieczeństwa
-
-Aplikacja mobilna pełni rolę **lekkiego klienta interfejsu i głosu**:
-- **Brak połączeń wychodzących z serwera do chmury**: Serwer na PC działa wyłącznie w trybie nasłuchu na interfejsie sieci lokalnej (LAN IP). Nie używa pośredników, zewnętrznych serwerów powiadomień ani usług relay.
-- **Połączenie poza domem**: Wyłącznie przez własny tunel VPN użytkownika (np. WireGuard / Tailscale / OpenVPN). Porty nie powinny być wystawiane publicznie do internetu bez ochrony tunelu.
-- **Certificate Pinning (odcisk certyfikatu SHA-256)**: Serwer generuje samopodpisany certyfikat ECDSA P-256. Podczas parowania telefon otrzymuje 64-znakowy odcisk SHA-256 w kodzie QR i musi go przypiąć (pinning), odrzucając wszelkie certyfikaty o innym odcisku (odporność na ataki typu Man-in-the-Middle).
-- **Bezpieczne tokeny urządzenia**: Telefon otrzymuje 32-bajtowy kryptograficznie losowy token Bearer. W bazie danych serwera przechowywany jest wyłącznie hash SHA-256 tokenu. Weryfikacja tokenu następuje w stałym czasie (`hmac.compare_digest`).
-- **Ochrona prywatności i antyphishing**:
-  - Serwer **nigdy nie przesyła surowej treści wiadomości e-mail** (ani w HTML, ani w tekście jawnym).
-  - Serwer **nigdy nie przesyła załączników**.
-  - Wszystkie adresy URL w tematach i podsumowaniach są zdefangowane (`[link pominięty]`).
-  - Wiadomości oznaczone jako podejrzane (phishing / malware) mają zablokowane streszczenie — serwer zwraca wyłącznie ostrzeżenie.
-  - Identyfikatory wiadomości w API (`id`) to 24-znakowe, nieprzewidywalne wartości skrótu HMAC z losowym kluczem serwera (brak ujawniania konta, folderu czy UID).
+Note: error messages in JSON responses (`error`, `message`, `warning`, `reply_text`) are returned in Polish; clients
+should rely on HTTP status codes and the documented fields, not on the message text.
 
 ---
 
-## 2. Format parowania przez kod QR
+## 1. Architecture and security principles
 
-Podczas wywołania operacji parowania w GUI lub przez API generowany jest jednorazowy kod 6-znakowy ważny przez 120 sekund.
+The mobile app is a **thin interface and voice client**:
+- **No outgoing connections from the server to the cloud**: the PC server only listens on the local network
+  interface (LAN IP). No intermediaries, external notification servers or relay services.
+- **Access away from home**: only through the user's own VPN tunnel (e.g. WireGuard / Tailscale / OpenVPN). Ports
+  must not be exposed to the internet without tunnel protection.
+- **Certificate pinning (SHA-256 fingerprint)**: the server generates a self-signed ECDSA P-256 certificate. During
+  pairing the phone receives the 64-character SHA-256 fingerprint in the QR code and must pin it, rejecting any
+  certificate with a different fingerprint (resistance to man-in-the-middle attacks).
+- **Secure device tokens**: the phone receives a 32-byte cryptographically random Bearer token. The server database
+  stores only the SHA-256 hash of the token. Verification is constant-time (`hmac.compare_digest`).
+- **Privacy and anti-phishing**:
+  - The server **never sends the raw body of an e-mail** (neither HTML nor plain text).
+  - The server **never sends attachments**.
+  - All URLs in subjects and summaries are defanged (`[link pominięty]`, i.e. "link omitted").
+  - Messages flagged as suspicious (phishing / malware) have their summary blocked — the server returns only a
+    warning.
+  - Message identifiers in the API (`id`) are 24-character, unpredictable HMAC digests with a random server key (no
+    disclosure of the account, folder or UID).
 
-### Format adresu URL w kodzie QR:
+---
+
+## 2. QR pairing format
+
+When pairing is started in the GUI or through the API, a one-time 6-character code valid for 120 seconds is
+generated.
+
+### URL format in the QR code
 ```text
-mailvoice://pair?host=<ip>&port=<port>&code=<kod>&fp=<sha256_certyfikatu>&v=1
+mailvoice://pair?host=<ip>&port=<port>&code=<code>&fp=<certificate_sha256>&v=1
 ```
 
-### Parametry:
-| Parametr | Typ | Opis |
+### Parameters
+| Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `host` | String | Adres IP serwera w sieci LAN (np. `192.168.1.50`) |
-| `port` | Int | Numer portu HTTPS (domyślnie `8765`) |
-| `code` | String | 6-znakowy jednorazowy kod autoryzacyjny (np. `K7P9X2`) |
-| `fp` | String | 64-znakowy odcisk palca SHA-256 certyfikatu serwera (hex) |
-| `v` | Int | Wersja protokołu (obecnie `1`) |
+| `host` | String | Server IP address on the LAN (e.g. `192.168.1.50`) |
+| `port` | Int | HTTPS port (default `8765`) |
+| `code` | String | 6-character one-time authorisation code (e.g. `K7P9X2`) |
+| `fp` | String | 64-character SHA-256 fingerprint of the server certificate (hex) |
+| `v` | Int | Protocol version (currently `1`) |
 
 ---
 
-## 3. Uwierzytelnianie
+## 3. Authentication
 
-Endpoint `POST /v1/pair` nie wymaga tokenu (wykorzystuje kod parowania).
-Wszystkie pozostałe endpointy REST wymagają nagłówka HTTP:
+The `POST /v1/pair` endpoint needs no token (it uses the pairing code).
+All other REST endpoints require the HTTP header:
 ```http
-Authorization: Bearer <TOKEN_32_BAJTY_HEX>
+Authorization: Bearer <TOKEN_32_BYTES_HEX>
 ```
-Dotyczy to także WebSocketu (`/v1/events`): token **wyłącznie w nagłówku** `Authorization`. Przekazanie go w adresie
-(`?token=`) jest odrzucane (`401`), bo adresy trafiają do logów, historii i serwerów pośredniczących.
-Brak tokenu, token błędny lub odwołany skutkuje kodem HTTP `401 Unauthorized`.
+This also applies to the WebSocket (`/v1/events`): the token goes **only in the header** `Authorization`. Passing it
+in the URL (`?token=`) is rejected (`401`) because URLs end up in logs, history and intermediary servers.
+A missing, wrong or revoked token results in HTTP `401 Unauthorized`.
 
 ---
 
-## 4. Endpointy REST
+## 4. REST endpoints
 
-### 4.1. Parowanie urządzenia
+### 4.1. Device pairing
 `POST /v1/pair`
-Używane raz podczas pierwszego połączenia z telefonem.
+Used once, on the first connection of a phone.
 
-**Limit**: maksymalnie 5 prób na minutę z jednego IP (ochrona przed brute-force).
+**Limit**: at most 5 attempts per minute from one IP (brute-force protection).
 
-**Request Body**:
+**Request body**:
 ```json
 {
   "code": "K7P9X2",
@@ -74,22 +88,22 @@ Używane raz podczas pierwszego połączenia z telefonem.
 {
   "status": "ok",
   "device_id": "3f8e0a1b...",
-  "token": "a1b2c3d4e5f6... (32 bajty hex)",
+  "token": "a1b2c3d4e5f6... (32 bytes hex)",
   "message": "Urządzenie zostało pomyślnie sparowane."
 }
 ```
 
-**Błędy**:
-- `400 Bad Request`: Błędny kod, brak aktywnej sesji parowania lub wygasły kod.
-- `403 Forbidden`: Osiągnięto limit sparowanych urządzeń (`server.max_devices`, domyślnie 5).
-- `429 Too Many Requests`: Przekroczono limit prób z danego adresu IP.
+**Errors**:
+- `400 Bad Request`: wrong code, no active pairing session or expired code.
+- `403 Forbidden`: the paired-device limit was reached (`server.max_devices`, default 5).
+- `429 Too Many Requests`: the attempt limit for this IP address was exceeded.
 
 ---
 
-### 4.2. Status serwera
+### 4.2. Server status
 `GET /v1/status`
 
-Zwraca ogólny stan aplikacji bez ujawniania danych osobowych ani adresów e-mail.
+Returns the general state of the application without revealing personal data or e-mail addresses.
 
 **Response 200 OK**:
 ```json
@@ -103,13 +117,14 @@ Zwraca ogólny stan aplikacji bez ujawniania danych osobowych ani adresów e-mai
 
 ---
 
-### 4.3. Lista ważnych wiadomości
+### 4.3. List of important messages
 `GET /v1/mails/important?limit=20`
 
-Zwraca metadane i streszczenia ostatnich ważnych maili. Wszystkie odnośniki URL są usunięte lub zdefangowane.
+Returns metadata and summaries of the latest important mails. All URLs are removed or defanged.
+Mail matching the user's "Ignore" rules is not returned.
 
-**Parametry Query**:
-- `limit`: liczba wiadomości (od 1 do 100, domyślnie 20).
+**Query parameters**:
+- `limit`: number of messages (1 to 100, default 20).
 
 **Response 200 OK**:
 ```json
@@ -143,12 +158,13 @@ Zwraca metadane i streszczenia ostatnich ważnych maili. Wszystkie odnośniki UR
 
 ---
 
-### 4.4. Streszczenie pojedynczej wiadomości
+### 4.4. Summary of a single message
 `GET /v1/mails/{id}/summary`
 
-Dla bezpiecznych wiadomości zwraca zdefangowane streszczenie. Dla wiadomości podejrzanych streszczenie jest ukryte, a serwer zwraca ostrzeżenie.
+For safe messages returns a defanged summary. For suspicious messages the summary is hidden and the server returns a
+warning.
 
-**Response 200 OK (bezpieczny mail)**:
+**Response 200 OK (safe mail)**:
 ```json
 {
   "id": "7b8f9e12a4c5d6e7f8012345",
@@ -158,7 +174,7 @@ Dla bezpiecznych wiadomości zwraca zdefangowane streszczenie. Dla wiadomości p
 }
 ```
 
-**Response 200 OK (podejrzany mail)**:
+**Response 200 OK (suspicious mail)**:
 ```json
 {
   "id": "c1a2b3d4e5f60718293a4b5c",
@@ -170,10 +186,11 @@ Dla bezpiecznych wiadomości zwraca zdefangowane streszczenie. Dla wiadomości p
 
 ---
 
-### 4.5. Potwierdzenie odsłuchania wiadomości (ACK)
+### 4.5. Acknowledging a message as heard (ACK)
 `POST /v1/mails/{id}/ack`
 
-Oznacza wiadomość lokalnie w bazie jako odsłuchaną/potwierdzoną przez użytkownika. **Nie modyfikuje stanu skrzynki pocztowej na serwerze IMAP**.
+Marks the message locally in the database as heard/acknowledged by the user. It **does not change the state of the
+mailbox on the IMAP server**.
 
 **Response 200 OK**:
 ```json
@@ -185,12 +202,14 @@ Oznacza wiadomość lokalnie w bazie jako odsłuchaną/potwierdzoną przez użyt
 
 ---
 
-### 4.6. Podsumowanie tematów (Topic Digest)
+### 4.6. Topic digest
 `GET /v1/digest?days=30`
 
-Zwraca zagregowane podsumowanie tematów i wątków z ostatnich N dni.
+Returns an aggregated summary of topics and threads from the last N days.
 
-Parametry opcjonalne: `limit` (1–200, domyślnie 60) — maksymalna liczba tematów **w każdej grupie statusu osobno** (mała grupa „oczekuje_na_innych” nie jest wypychana przez dużą „oczekuje_na_mnie”); `all=1` — dołącza też tematy „zamknięte” i „informacyjne” (domyślnie tylko ich liczby w `counts`).
+Optional parameters: `limit` (1–200, default 60) — the maximum number of topics **in each status group separately**
+(a small `oczekuje_na_innych` group is not pushed out by a large `oczekuje_na_mnie` one); `all=1` — also includes
+the "closed" and "informational" topics (by default only their counts appear in `counts`).
 
 **Response 200 OK**:
 ```json
@@ -204,20 +223,70 @@ Parametry opcjonalne: `limit` (1–200, domyślnie 60) — maksymalna liczba tem
       "importance": 9,
       "mail_count": 7,
       "last_activity": "2026-10-02T16:20:00Z",
-      "who_to_whom": ["Kowalski -> Ty", "Ty -> Zarząd"]
+      "who_to_whom": ["Kowalski -> Ty", "Ty -> Zarząd"],
+      "vip": false
     }
-  ]
+  ],
+  "counts": {"oczekuje_na_mnie": 134, "oczekuje_na_innych": 36, "informacyjne": 165, "zamknięte": 132},
+  "total": 467,
+  "shown": 60
 }
 ```
 
+- `status`: `oczekuje_na_mnie` (waiting for me) | `oczekuje_na_innych` (waiting for others) | `informacyjne`
+  (informational) | `zamknięte` (closed).
+- `vip` (optional, absent = `false`): the thread matches a user VIP rule; such threads come first in their group.
+- `counts`, `total`, `shown`: the number of all topics by status, in total, and actually returned. Older server
+  versions may not send these fields — a client should tolerate that.
+- The first call may take a few seconds (analysis happens on the computer); further calls within about 2 minutes are
+  served from a cache.
+
 ---
 
-### 4.7. Przesłanie komendy głosowej
+### 4.6a. Ignoring a message
+`POST /v1/mails/{id}/ignore`
+
+Creates an "ignore" rule on the computer based on the given message. The computer stores it in its settings (the
+user can remove it there); ignored mail disappears from the important list and from the topic digest.
+
+**Request body**:
+```json
+{ "mode": "similar" }
+```
+`mode` (default `similar`):
+- `similar` — similar mail from this sender (same base subject),
+- `sender` — all mail from this sender,
+- `domain` — all mail from this domain (the whole organisation).
+
+**Response 200 OK**:
+```json
+{ "status": "ok", "mode": "similar", "rule": "od: info@sklep.pl, temat zawiera: newsletter tygodniowy" }
+```
+
+**Errors**: `400` (unknown mode / bad JSON), `404` (unknown message), `503` (feature unavailable on the computer).
+Ignoring is allowed for suspicious messages too (the recommended reaction to phishing).
+
+---
+
+### 4.6b. Marking VIP
+`POST /v1/mails/{id}/vip`
+
+The mirror image of ignoring: creates a VIP rule. Such mail always notifies, and threads with it come first in the
+topic digest. Ignoring takes priority over VIP; adding a VIP rule removes an identical ignore rule.
+
+Request and response as in 4.6a (modes `similar` / `sender` / `domain`).
+
+**Errors**: as in 4.6a, plus `403` — the message is suspicious (phishing); a forged sender cannot become a VIP.
+
+---
+
+### 4.7. Submitting a voice command
 `POST /v1/voice/command`
 
-Aplikacja mobilna wykonuje rozpoznawanie mowy lokalnie na telefonie (np. offline przez silnik Android STT) i przesyła tekst do zinterpretowania przez serwer.
+The mobile app performs speech recognition locally on the phone (e.g. offline through the Android STT engine) and
+sends the text to the server to be interpreted.
 
-**Request Body**:
+**Request body**:
 ```json
 {
   "text": "następny mail",
@@ -233,26 +302,26 @@ Aplikacja mobilna wykonuje rozpoznawanie mowy lokalnie na telefonie (np. offline
 }
 ```
 
-Obsługiwane akcje (`action`):
-- `next`: przejście do kolejnej wiadomości
-- `repeat`: ponowne odtworzenie bieżącej wiadomości
-- `skip`: pominięcie wiadomości
-- `stop`: zatrzymanie odtwarzania
-- `yes`: potwierdzenie pytania (np. odsłuchaj zaległe / czytaj maile)
-- `no`: odroczenie pytania
-- `louder`: zwiększenie głośności
-- `quieter`: zmniejszenie głośności
-- `digest`: prośba o podsumowanie tematów
-- `contact`: zapytanie o kontekst kontaktu
-- `search`: zapytanie o wyszukanie wiadomości
-- `unknown`: nierozpoznana komenda
+Supported actions (`action`):
+- `next`: go to the next message
+- `repeat`: replay the current message
+- `skip`: skip the message
+- `stop`: stop playback
+- `yes`: confirm a question (e.g. hear the backlog / read the mail)
+- `no`: postpone the question
+- `louder`: increase the volume
+- `quieter`: decrease the volume
+- `digest`: ask for the topic digest
+- `contact`: ask for a contact's context
+- `search`: ask to search for a message
+- `unknown`: unrecognised command
 
 ---
 
-### 4.8. Odłączenie urządzenia
+### 4.8. Disconnecting a device
 `DELETE /v1/devices/self`
 
-Odwołuje token bieżącego urządzenia. Po wywołaniu tego endpointu token staje się trwale nieważny.
+Revokes the current device's token. After this call the token is permanently invalid.
 
 **Response 200 OK**:
 ```json
@@ -264,15 +333,16 @@ Odwołuje token bieżącego urządzenia. Po wywołaniu tego endpointu token staj
 
 ---
 
-## 5. Strumień zdarzeń w czasie rzeczywistym (WebSocket)
+## 5. Real-time event stream (WebSocket)
 
-`GET /v1/events` (nagłówek `Authorization: Bearer <TOKEN>`)
+`GET /v1/events` (header `Authorization: Bearer <TOKEN>`)
 
-Ustanawia dwukierunkowe połączenie WebSocket (z automatycznym heartbeat co 25 s). Serwer przesyła powiadomienia o nowych mailach w czasie rzeczywistym.
+Opens a two-way WebSocket connection (with an automatic heartbeat every 25 s). The server pushes notifications about
+new mail in real time.
 
-### Przykłady zdarzeń:
+### Event examples
 
-#### 1. Nowe ważne maile:
+#### 1. New important mail
 ```json
 {
   "type": "NewImportant",
@@ -293,7 +363,7 @@ Ustanawia dwukierunkowe połączenie WebSocket (z automatycznym heartbeat co 25 
 }
 ```
 
-#### 2. Wykryta wiadomość podejrzana:
+#### 2. Suspicious message detected
 ```json
 {
   "type": "SuspiciousMail",
@@ -313,7 +383,7 @@ Ustanawia dwukierunkowe połączenie WebSocket (z automatycznym heartbeat co 25 
 }
 ```
 
-#### 3. Przypomnienia:
+#### 3. Reminders
 ```json
 {
   "type": "BeepReminder",
@@ -323,7 +393,7 @@ Ustanawia dwukierunkowe połączenie WebSocket (z automatycznym heartbeat co 25 
   }
 }
 ```
-lub
+or
 ```json
 {
   "type": "AskReminder",
@@ -336,9 +406,9 @@ lub
 
 ---
 
-## 6. Kody błędów HTTP i nagłówki bezpieczeństwa
+## 6. HTTP error codes and security headers
 
-Wszystkie odpowiedzi serwera zawierają następujące nagłówki bezpieczeństwa:
+All server responses carry the following security headers:
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Content-Security-Policy: default-src 'none'`
@@ -346,10 +416,12 @@ Wszystkie odpowiedzi serwera zawierają następujące nagłówki bezpieczeństwa
 - `Cache-Control: no-store, no-cache, must-revalidate`
 - `Server: MailVoice`
 
-Standardowe kody błędów:
-- `400 Bad Request`: Błędny format JSON lub nieprawidłowe parametry.
-- `401 Unauthorized`: Brak tokenu autoryzacji lub niepoprawny token.
-- `404 Not Found`: Zasób (np. mail o danym ID) nie został odnaleziony.
-- `413 Payload Too Large`: Rozmiar żądania przekracza 64 KB.
-- `429 Too Many Requests`: Przekroczono limit zapytań (np. przy parowaniu).
-- `500 Internal Server Error`: Wewnętrzny błąd serwera (zwracany bez ujawniania stack trace ani danych technicznych).
+Standard error codes:
+- `400 Bad Request`: invalid JSON format or invalid parameters.
+- `401 Unauthorized`: missing authorisation token or an incorrect token.
+- `403 Forbidden`: operation refused (e.g. the device limit, or marking a suspicious message as VIP).
+- `404 Not Found`: the resource (e.g. a mail with the given ID) was not found.
+- `413 Payload Too Large`: the request size exceeds 64 KB.
+- `429 Too Many Requests`: the request limit was exceeded (e.g. during pairing).
+- `500 Internal Server Error`: an internal server error (returned without revealing a stack trace or technical
+  details).

@@ -160,3 +160,54 @@ async def test_ignore_unavailable_without_callback(ctx):
         assert resp.status == 503
     finally:
         await client.close()
+
+
+@pytest.mark.anyio
+async def test_vip_endpoint_refuses_suspicious_mail_but_ignore_still_works(ctx):
+    """Podrobiony nadawca nie zostaje VIP-em, nawet gdy ktoś pominie przycisk w aplikacji."""
+    _save(ctx.store, 1, "Bank <alert@fake-bank.xyz>", "Konto zawieszone")
+    record = ctx.store.get_mail_index("a", "INBOX", 1, 1)
+    ctx.store.save_mail_index(
+        MailIndexRecord(**{**record.__dict__, "risk": "high", "risk_reasons": "Podejrzany link"})
+    )
+    _save(ctx.store, 2, "Szef <szef@firma.pl>", "Umowa")
+    got: dict[str, list] = {"vip": [], "ignore": []}
+    ctx.on_vip = got["vip"].append
+    ctx.on_ignore = got["ignore"].append
+    _, token = ctx.device_manager.pair_device(ctx.device_manager.start_pairing_session().code, "T")
+    headers = {"Authorization": f"Bearer {token}"}
+    client = TestClient(TestServer(create_app(ctx)))
+    await client.start_server()
+    try:
+        mails = (await (await client.get("/v1/mails/important", headers=headers)).json())["mails"]
+        bad = next(m for m in mails if "Konto" in m["subject"])
+        good = next(m for m in mails if m["subject"] == "Umowa")
+
+        refused = await client.post(
+            f"/v1/mails/{bad['id']}/vip", json={"mode": "sender"}, headers=headers
+        )
+        assert refused.status == 403 and got["vip"] == []
+
+        ignored = await client.post(
+            f"/v1/mails/{bad['id']}/ignore", json={"mode": "sender"}, headers=headers
+        )
+        assert ignored.status == 200 and len(got["ignore"]) == 1  # ignorowanie zawsze wolno
+
+        accepted = await client.post(
+            f"/v1/mails/{good['id']}/vip", json={"mode": "sender"}, headers=headers
+        )
+        assert accepted.status == 200 and len(got["vip"]) == 1
+    finally:
+        await client.close()
+
+
+def test_vip_button_is_disabled_for_suspicious_mail_on_desktop(qapp):
+    window = MainWindow(speaker=FakeSpeaker())
+    safe = _item(1, "Szef <szef@firma.pl>", "Umowa")
+    phish = _item(2, "Bank <alert@fake-bank.xyz>", "Konto")
+    object.__setattr__(phish, "suspicious", True)
+    object.__setattr__(phish, "risk_level", "high")
+    window._add_important_mail(safe)
+    window._add_important_mail(phish)
+    assert window.tbl_mails.cellWidget(0, 6).isEnabled()
+    assert not window.tbl_mails.cellWidget(1, 6).isEnabled()

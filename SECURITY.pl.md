@@ -1,6 +1,6 @@
 # Bezpieczeństwo MailVoice — zasady NIENARUSZALNE
 
-[🇬🇧 English](SECURITY.md) · **🇵🇱 Polski**
+[🇬🇧 English](SECURITY.pl.md) · **🇵🇱 Polski**
 
 Wymóg użytkownika: **nie wchodzimy w żadne odnośniki, nie pobieramy podejrzanych załączników i nie słuchamy
 instrukcji zawartych (także ukrytych) w mailach.** Każda zmiana kodu musi te zasady zachować.

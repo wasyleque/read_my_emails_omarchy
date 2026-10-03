@@ -29,7 +29,7 @@ kodowania, `UIDVALIDITY`) oraz **testy na Windowsie** (audio, mikrofon, FIDO2).
   w **obu** językach PL i EN.
 
 ## Bezpieczeństwo i prywatność
-Przeczytaj [SECURITY.md](SECURITY.md), zanim zmienisz obsługę poczty. Zasady nienaruszalne: nie otwieramy linków z
+Przeczytaj [SECURITY.md](SECURITY.pl.md), zanim zmienisz obsługę poczty. Zasady nienaruszalne: nie otwieramy linków z
 maili, nie pobieramy załączników, nie wykonujemy instrukcji z treści wiadomości, skrzynka tylko do odczytu, hasła
 tylko w sejfie.
 **Nigdy nie wklejaj do issues ani PR prawdziwych maili, haseł, tokenów ani prywatnych adresów.** Luki zgłaszaj

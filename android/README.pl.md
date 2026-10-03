@@ -61,7 +61,7 @@ Wszystkie zależności zostały dobrane pod kątem stabilności, bezpieczeństwa
 
 ## 3. Architektura bezpieczeństwa (B1: Parowanie i połączenie)
 
-Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.md):
+Zgodnie z zasadami w [`SECURITY.md`](../SECURITY.pl.md):
 - **Certificate Pinning**: Akceptowany jest wyłącznie certyfikat serwera, którego skrót SHA-256 (DER) odpowiada odciskowi z kodu QR. Porównanie jest stałoczasowe (`MessageDigest.isEqual`), chroniąc przed atakami timingowymi.
 - **Brak ruchu nieszyfrowanego**: `cleartextTrafficPermitted=false`, wymuszenie HTTPS/TLS 1.2+, odrzucanie żądań HTTP.
 - **Bezpieczny magazyn poświadczeń (`KeystoreTokenStore`)**: Token Bearer i odcisk serwera są szyfrowane algorytmem AES-256-GCM kluczem sprzętowym z `AndroidKeyStore`. Wektor IV (12 bajtów) generowany jest losowo przy każdym zapisie. Kopie zapasowe są wyłączone (`allowBackup="false"`).

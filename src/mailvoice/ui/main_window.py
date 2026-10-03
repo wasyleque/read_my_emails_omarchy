@@ -528,6 +528,8 @@ class MainWindow(QMainWindow):
 
         btn_vip = QPushButton(tr("btn_vip"))
         btn_vip.clicked.connect(lambda _, m=item: self._vip_mail(m))
+        # Podejrzany (phishing) mail nie może zostać VIP-em jednym kliknięciem.
+        btn_vip.setEnabled(not item.suspicious and item.risk_level == "low")
         self.tbl_mails.setCellWidget(row, 6, btn_vip)
 
     def _vip_mail(self, item: ProcessedMail) -> None:

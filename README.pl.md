@@ -59,7 +59,7 @@ Poczta nie opuszcza Twojego komputera: analiza działa na **Twoim własnym serwe
 - **TLS jest obowiązkowy** dla IMAP; połączenia nieszyfrowane są odrzucane.
 - **Lokalny indeks przechowuje tylko metadane i krótkie podsumowania** (nigdy pełnych treści maili), z limitem retencji
   (`index_retention_days`, domyślnie 90).
-- **Zasady antyphishingowe są nienaruszalne** — zob. [`SECURITY.md`](SECURITY.md): aplikacja nigdy nie otwiera
+- **Zasady antyphishingowe są nienaruszalne** — zob. [`SECURITY.md`](SECURITY.pl.md): aplikacja nigdy nie otwiera
   linków, nie pobiera załączników i nie słucha instrukcji zawartych (także ukrytych) w mailach. Wdrożone: bezpieczne pobieranie
   bez treści załączników, usuwanie ukrytego tekstu, znaczniki danych niezaufanych przeciw prompt injection, ocena
   ryzyka phishingu (podszywanie się, podobne domeny, wyłudzanie danych z linkiem do obcej domeny, podszywanie pod marki),
@@ -163,7 +163,7 @@ MailVoice zawiera wbudowany serwer lokalny HTTPS/WebSocket (`pip install -e ".[s
 - **Na telefonie:** ważne maile ze streszczeniami, podsumowanie tematów („Sprawy”: czeka na mnie / na innych), sterowanie
   głosem (telefon robi rozpoznawanie i czytanie mowy, analiza zostaje na komputerze) oraz te same przyciski
   **Ignoruj… / VIP…**.
-- Pełna specyfikacja API dostępna w [`docs/mobile-api.md`](docs/mobile-api.md).
+- Pełna specyfikacja API dostępna w [`docs/mobile-api.md`](docs/mobile-api.pl.md).
 
 ## Rozwój
 
@@ -175,7 +175,7 @@ ruff check . && QT_QPA_PLATFORM=offscreen python -m pytest -q
 
 Zasady dla kodu: logika biznesowa w `src/mailvoice/core/` **bez zależności od Qt**; `ui/` bez logiki biznesowej;
 backendy głosu za Protocolami, żeby dało się je mockować; każda funkcja ma test; przed PR-em muszą przejść
-`ruff check .` i `pytest`. Przeczytaj [`SECURITY.md`](SECURITY.md), zanim zmienisz obsługę poczty.
+`ruff check .` i `pytest`. Przeczytaj [`SECURITY.md`](SECURITY.pl.md), zanim zmienisz obsługę poczty.
 
 ## Współpraca
 
