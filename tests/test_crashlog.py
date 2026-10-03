@@ -4,6 +4,11 @@ from mailvoice import crashlog
 
 
 def test_unhandled_error_is_written_to_log(tmp_path, monkeypatch):
+    # Test sprawdza zapis do logu. Gdy w procesie jest już QApplication (z innych testów), report()
+    # otworzyłby modalne okno i zawiesił cały zestaw — więc udajemy brak aplikacji Qt.
+    from PySide6.QtWidgets import QApplication
+
+    monkeypatch.setattr(QApplication, "instance", staticmethod(lambda: None))
     log = tmp_path / "mailvoice.log"
     old_hook, old_thread_hook = sys.excepthook, crashlog.threading.excepthook
     try:

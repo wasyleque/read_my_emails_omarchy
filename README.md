@@ -183,6 +183,14 @@ Code rules: business logic lives in `src/mailvoice/core/` with **no Qt dependenc
 logic; voice backends sit behind Protocols so they can be faked; every function gets a test; `ruff check .` and
 `pytest` must pass before a PR. Please read [`SECURITY.md`](SECURITY.md) before touching mail handling.
 
+## Support the project
+
+MailVoice is free and open source (GPL-3.0). It is made by **wasyleque**. If you like it and want to say thanks,
+you can leave an optional donation via PayPal (`wasyl@o2.pl`) — the program and the Android app also have a
+"♥ If you like it, please donate" button. Thank you!
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=wasyl%40o2.pl&currency_code=PLN&item_name=MailVoice)
+
 ## Contributing
 
 - **Bug reports** — especially from different mail providers (folder names, encodings, `UIDVALIDITY`, OAuth quirks).

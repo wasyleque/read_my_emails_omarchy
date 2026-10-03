@@ -6,6 +6,9 @@ Aplikacja towarzysząca programowi MailVoice na komputerze (parowanie kodem QR p
 
 ---
 
+Stworzył **wasyleque** · [Projekt na GitHubie](https://github.com/wasyleque/read_my_emails_omarchy) · Jeśli Ci się
+podoba, na ekranie Ustawień jest przycisk „♥ Jeśli Ci się podoba, wesprzyj projekt” (PayPal, dobrowolnie).
+
 ## 0. Gotowy plik APK (bez budowania)
 
 1. Pobierz `MailVoice-0.1.0-beta.apk` z [wydania Android](../../../releases/tag/android-v0.1.0-beta) i porównaj jego

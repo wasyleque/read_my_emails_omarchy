@@ -29,6 +29,10 @@ def test_static_ast_forbidden_security_patterns():
         (src_dir / "mailvoice" / "core" / "analyzer.py").resolve(),
     }
 
+    # Jedyny wyjątek: stopka z linkiem do projektu i darowizną — STAŁE adresy z białej listy
+    # (patrz test_about_footer.py, który pilnuje, że to nie mogą być adresy z maili).
+    allowed_open_url_files = {(src_dir / "mailvoice" / "ui" / "about.py").resolve()}
+
     errors: list[str] = []
 
     for py_file in src_dir.rglob("*.py"):
@@ -85,7 +89,11 @@ def test_static_ast_forbidden_security_patterns():
                         f"{py_file}:{node.lineno} Zabronione wywołanie setOpenExternalLinks"
                     )
                 # openUrl na QDesktopServices
-                if isinstance(node.func, ast.Attribute) and node.func.attr == "openUrl":
+                if (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "openUrl"
+                    and resolved_file not in allowed_open_url_files
+                ):
                     errors.append(f"{py_file}:{node.lineno} Zabronione wywołanie openUrl")
                 # subprocess z shell=True
                 for kw in node.keywords:

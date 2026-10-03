@@ -53,6 +53,7 @@ from mailvoice.core.summarizer import summarize
 from mailvoice.core.voice_routing import computer_should_speak
 from mailvoice.server.server import MobileServer
 from mailvoice.ui import theme
+from mailvoice.ui.about import build_footer
 from mailvoice.ui.i18n import get_language, tr
 from mailvoice.ui.ignore_dialog import IgnoreDialog
 from mailvoice.ui.search_dialog import SearchDialog
@@ -333,6 +334,7 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(self.btn_settings)
 
         layout.addLayout(btn_layout)
+        layout.addWidget(build_footer(self))
         self.setCentralWidget(central_widget)
 
     def _init_digest_tab(self) -> None:

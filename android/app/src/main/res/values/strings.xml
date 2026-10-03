@@ -165,4 +165,7 @@
     <string name="bg_allow_battery">Zezwól na pracę w tle</string>
     <string name="bg_xiaomi_hint">Na telefonach Xiaomi/Poco włącz też „Autostart” dla MailVoice i ustaw baterię na „Bez ograniczeń”.</string>
     <string name="bg_open_autostart">Otwórz ustawienia autostartu</string>
+    <string name="about_created_by">Created by %1$s</string>
+    <string name="about_project_github">Projekt na GitHubie</string>
+    <string name="btn_donate">♥ Jeśli Ci się podoba, wesprzyj projekt</string>
 </resources>

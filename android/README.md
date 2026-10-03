@@ -6,6 +6,9 @@ Companion app for the MailVoice desktop program (pairing by QR code over your ow
 
 ---
 
+Created by **wasyleque** · [Project on GitHub](https://github.com/wasyleque/read_my_emails_omarchy) · If you like
+it, the app's Settings screen has a "♥ If you like it, please donate" button (PayPal, optional).
+
 ## 0. Install a ready-made APK (no building)
 
 1. Download `MailVoice-0.1.0-beta.apk` from the [Android release](../../../releases/tag/android-v0.1.0-beta) and

@@ -294,6 +294,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Coś poszło nie tak. Spróbuj ponownie. Jeśli problem wraca, kliknij Szczegóły."
         ),
         "btn_details": "Szczegóły techniczne",
+        "footer_created_by": "Created by",
+        "footer_project": "Projekt na GitHubie",
+        "btn_donate": "♥ Jeśli Ci się podoba, wesprzyj projekt",
+        "donate_tooltip": "Otworzy stronę PayPal z dobrowolną darowizną (nie jest wymagana)",
         "btn_hide_details": "Ukryj szczegóły",
         # Mobile server & pairing
         "tab_mobile": "Telefon (Android)",
@@ -602,6 +606,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Something went wrong. Please try again. If the problem persists, click Details."
         ),
         "btn_details": "Technical details",
+        "footer_created_by": "Created by",
+        "footer_project": "Project on GitHub",
+        "btn_donate": "♥ If you like it, please donate",
+        "donate_tooltip": "Opens PayPal for an optional donation (not required)",
         "btn_hide_details": "Hide details",
         # Mobile server & pairing
         "tab_mobile": "Phone (Android)",

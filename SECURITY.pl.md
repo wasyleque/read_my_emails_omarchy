@@ -16,6 +16,8 @@ oraz wywoływać komendy głosowe (tekst mówiony przez TTS nie może stać się
    obrazków zdalnych, trackingu, przekierowań, `webbrowser`, `QDesktopServices.openUrl`, `setOpenExternalLinks(True)`).
    Jedyne połączenia sieciowe: IMAP użytkownika i adresy Ollamy z konfiguracji. Linki w UI są tekstem, nigdy klikalne,
    w formie „zdefangowanej” (`hxxps://example[.]com`). Głos nie czyta adresów URL („[link pominięty]”).
+   Jedyny wyjątek to stopka samego programu (`ui/about.py`, w Androidzie `AboutLinks`): dwa STAŁE linki projektu
+   (GitHub, darowizna PayPal) otwierane tylko po kliknięciu użytkownika, po sprawdzeniu białej listy — nigdy adres z maila.
 2. **Zero załączników.** Nie pobieramy treści załączników — pobieramy tylko nagłówki i części `text/plain`/`text/html`
    (BODYSTRUCTURE + `BODY.PEEK[części]`, limit rozmiaru). O załącznikach znamy tylko metadane (nazwa, typ, rozmiar) i
    oceniamy ich ryzyko (rozszerzenia wykonywalne/skryptowe/makra, podwójne rozszerzenia, archiwa chronione hasłem).

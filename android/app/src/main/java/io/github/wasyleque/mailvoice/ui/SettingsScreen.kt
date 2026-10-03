@@ -204,6 +204,8 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.titleMedium
             )
         }
+
+        AboutSection()
     }
 
     if (showDisconnectDialog) {

@@ -16,6 +16,8 @@ voice commands (text spoken by TTS must never become a command).
    redirects, `webbrowser`, `QDesktopServices.openUrl`, `setOpenExternalLinks(True)`). The only network connections
    are the user's IMAP servers and the Ollama addresses from the configuration. Links in the UI are text, never
    clickable, in "defanged" form (`hxxps://example[.]com`). Voice never reads URLs ("[link omitted]").
+   The only exception is the program's own footer (`ui/about.py`, Android `AboutLinks`): two FIXED project links
+   (GitHub, PayPal donation) opened only on the user's click after an allowlist check — never an address from mail.
 2. **Zero attachments.** We do not download attachment content — only headers and `text/plain`/`text/html` parts
    (BODYSTRUCTURE + `BODY.PEEK[parts]`, size limit). About attachments we know only metadata (name, type, size) and
    assess their risk (executable/script/macro extensions, double extensions, password-protected archives).

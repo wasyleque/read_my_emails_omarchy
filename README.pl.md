@@ -181,6 +181,14 @@ Zasady dla kodu: logika biznesowa w `src/mailvoice/core/` **bez zależności od 
 backendy głosu za Protocolami, żeby dało się je mockować; każda funkcja ma test; przed PR-em muszą przejść
 `ruff check .` i `pytest`. Przeczytaj [`SECURITY.md`](SECURITY.pl.md), zanim zmienisz obsługę poczty.
 
+## Wesprzyj projekt
+
+MailVoice jest darmowy i otwartoźródłowy (GPL-3.0). Stworzył go **wasyleque**. Jeśli Ci się podoba i chcesz
+podziękować, możesz zostawić dobrowolną darowiznę przez PayPal (`wasyl@o2.pl`) — program i aplikacja na Androida mają
+też przycisk „♥ Jeśli Ci się podoba, wesprzyj projekt”. Dziękuję!
+
+[![Wesprzyj przez PayPal](https://img.shields.io/badge/Wesprzyj-PayPal-blue?logo=paypal)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=wasyl%40o2.pl&currency_code=PLN&item_name=MailVoice)
+
 ## Współpraca
 
 - **Zgłoszenia błędów** — szczególnie od różnych dostawców poczty (nazwy folderów, kodowania, `UIDVALIDITY`, OAuth).
